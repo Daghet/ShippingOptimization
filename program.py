@@ -31,9 +31,14 @@ def check_inventory(order, location):
     return True
 
 # Function to calculate shipping cost
+# Simplicity: Cost = distance x rate x total items
 def calculate_shipping_cost(location, order, distance):
     # TODO: check cost of shipping based on distance and rate
-    pass
+    order_item_quantity = sum(order.values())
+    location_rate = location["rate"]
+    cost = distance * location_rate * order_item_quantity
+    return cost
+    
 
 # Main logic
 def find_best_shipping_plan(order, location, customer):
