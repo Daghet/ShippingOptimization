@@ -3,7 +3,6 @@ import pulp
 import requests
 import os
 from dotenv import load_dotenv
-import base64
 import logging
 import time
 
@@ -11,10 +10,11 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Set up logging
+# Set up logging for debugging and monitoring
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Sample data for initial page load
 sample_data = {
     "products": {
         "Laptop": {"weight": 5.0, "length": 15, "width": 10, "height": 1},
@@ -63,6 +63,7 @@ UPS_TOKEN_URL = "https://onlinetools.ups.com/security/v1/oauth/token"
 UPS_API_URL = "https://onlinetools.ups.com/api/rating/v1/shop"
 
 def get_ups_access_token():
+    """Obtains an access token from UPS for API authentication."""
     if not all([UPS_CLIENT_ID, UPS_CLIENT_SECRET]):
         raise ValueError("UPS OAuth credentials are missing.")
     headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
@@ -75,23 +76,16 @@ def get_ups_access_token():
         raise Exception(f"Failed to obtain UPS access token: {e}")
 
 def get_ups_shipping_cost(origin_city, origin_postal, origin_country, destination_city, destination_postal, destination_country, items_to_ship, products, access_token):
+    """Calculates shipping cost using UPS API for given items and locations."""
     logger.debug(f"Calling get_ups_shipping_cost with items_to_ship: {items_to_ship}")
     for item in items_to_ship:
         if item not in products:
             logger.warning(f"Item '{item}' not in products, using default dimensions")
             products[item] = {"weight": 1.0, "length": 10, "width": 10, "height": 10}
-    total_weight = 0.0
-    lengths = []
-    widths = []
-    heights = []
-    for item, quantity in items_to_ship.items():
-        total_weight += quantity * products[item]["weight"]
-        lengths.append(products[item]["length"])
-        widths.append(products[item]["width"])
-        heights.append(products[item]["height"])
-    max_length = max(lengths)
-    max_width = max(widths)
-    max_height = max(heights)
+    total_weight = sum(quantity * products[item]["weight"] for item, quantity in items_to_ship.items())
+    max_length = max(products[item]["length"] for item in items_to_ship)
+    max_width = max(products[item]["width"] for item in items_to_ship)
+    max_height = max(products[item]["height"] for item in items_to_ship)
 
     payload = {
         "RateRequest": {
@@ -125,6 +119,7 @@ def get_ups_shipping_cost(origin_city, origin_postal, origin_country, destinatio
         return 50.0 * sum(items_to_ship.values()), 50.0
 
 def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, origin_countries, store_list, destination_city, destination_postal, products, destination_country):
+    """Calculates the optimal shipping plan using PuLP and UPS API."""
     logger.debug(f"Order Quantities: {order_quantities}")
     logger.debug(f"Store Inventories: {store_inventories}")
     logger.debug(f"Products: {products}")
@@ -227,11 +222,13 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
 
 @app.route('/', methods=['GET'])
 def index():
+    """Renders the main page with sample data."""
     default_stores = list(sample_data["store_inventories"].keys())
     return render_template('index.html', stores=default_stores, sample_data=sample_data)
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
+    """Handles the calculation request and returns the shipping plan."""
     try:
         start_time = time.time()
         

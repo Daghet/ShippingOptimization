@@ -1,3 +1,4 @@
+/* General Styles */
 body {
   font-family: "Segoe UI", Arial, sans-serif;
   margin: 0;
@@ -10,6 +11,8 @@ h1 {
   color: #ffffff;
   margin-bottom: 30px;
 }
+
+/* Section Styles */
 .section {
   background: #3a3f47;
   padding: 0;
@@ -45,6 +48,8 @@ h1 {
   padding: 0 20px;
   overflow: hidden;
 }
+
+/* Table Styles */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -63,6 +68,8 @@ th {
   color: white;
   font-weight: 600;
 }
+
+/* Order Entry Styles */
 .order-entry {
   display: flex;
   align-items: center;
@@ -84,6 +91,8 @@ th {
 .order-entry select {
   margin-right: 15px;
 }
+
+/* Input Styles */
 input[type="text"],
 input[type="number"],
 select {
@@ -101,6 +110,8 @@ input[type="number"] {
 select {
   width: 100px;
 }
+
+/* Item Pair Styles */
 .item-pair {
   display: flex;
   align-items: center;
@@ -109,6 +120,8 @@ select {
 .item-pair input {
   margin-right: 10px;
 }
+
+/* Button Styles */
 button {
   padding: 10px 20px;
   background: #b35900;
@@ -122,6 +135,8 @@ button {
 button:hover {
   background: #8c4600;
 }
+
+/* Delete Button Styles */
 .delete-btn {
   color: #ff5555;
   cursor: pointer;
@@ -131,11 +146,15 @@ button:hover {
 .delete-btn:hover {
   text-decoration: underline;
 }
+
+/* Error Message Styles */
 .error {
   color: #ff5555;
   text-align: center;
   margin: 20px 0;
 }
+
+/* Result Styles */
 .result {
   background: #2f343d;
   padding: 20px;
