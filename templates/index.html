@@ -6,45 +6,78 @@
     <title>Shipping Optimization with UPS</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7fa;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
         }
 
         .section {
-            margin-bottom: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 0;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
         }
 
         table {
+            width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         th,
         td {
-            border: 1px solid #ccc;
-            padding: 8px;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
         }
 
-        .error {
-            color: red;
-        }
-
-        .result {
-            color: green;
+        th {
+            background: #3498db;
+            color: white;
+            font-weight: 600;
         }
 
         .order-entry {
-            margin-bottom: 5px;
             display: flex;
             align-items: center;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
         }
 
-        .store-row td {
-            vertical-align: top;
+        .order-entry label,
+        .order-entry input {
+            margin-right: 15px;
+            /* Spacing between fields */
         }
 
-        input[type="text"] {
-            width: 100px;
+        input[type="text"],
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            width: 80px;
+            /* Adjusted for uniformity */
         }
 
         input[type="number"] {
@@ -52,14 +85,65 @@
         }
 
         .item-pair {
-            display: block;
-            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .item-pair input {
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #2980b9;
         }
 
         .delete-btn {
-            margin-left: 10px;
+            color: #e74c3c;
             cursor: pointer;
-            color: red;
+            font-size: 14px;
+            margin-left: 15px;
+        }
+
+        .delete-btn:hover {
+            text-decoration: underline;
+        }
+
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .result {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .result h2 {
+            color: #27ae60;
+        }
+
+        .result ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .result li {
+            padding: 5px 0;
         }
     </style>
     <script>
@@ -83,7 +167,7 @@
 
             const storeRows = document.querySelectorAll('.store-row');
             storeRows.forEach(row => {
-                const stockCell = row.cells[2];
+                const stockCell = row.cells[3];
                 const storeNameInput = row.cells[0].querySelector('input');
                 const storeName = storeNameInput.value || `store${storeCount}`;
                 stockCell.innerHTML += `
@@ -108,6 +192,7 @@
             newRow.innerHTML = `
                 <td><input type="text" name="store${storeCount}_name" value="New Store ${storeCount + 1}" oninput="updateStoreReferences(this)"></td>
                 <td><input type="text" name="origin_store${storeCount}" value="New City"></td>
+                <td><input type="text" name="origin_postal_store${storeCount}" value="00000"></td>
                 <td><input type="number" name="fixed_store${storeCount}" step="any" value="0"></td>
                 <td>
                     ${Array.from({ length: itemCount }, (_, i) => `
@@ -132,11 +217,13 @@
             const row = storeInput.closest('.store-row');
             const newStoreName = storeInput.value || `store${storeCount}`;
             const originInput = row.cells[1].querySelector('input');
-            const fixedInput = row.cells[2].querySelector('input');
-            const stockCell = row.cells[3];
+            const postalInput = row.cells[2].querySelector('input');
+            const fixedInput = row.cells[3].querySelector('input');
+            const stockCell = row.cells[4];
             const stockInputs = stockCell.querySelectorAll('input[type="number"]');
 
             originInput.name = `origin_${newStoreName}`;
+            postalInput.name = `origin_postal_${newStoreName}`;
             fixedInput.name = `fixed_${newStoreName}`;
             stockInputs.forEach((input, i) => {
                 input.name = `stock_${newStoreName}_item${i}`;
@@ -149,9 +236,13 @@
     <h1>Shipping Optimization with UPS</h1>
     <form method="POST">
         <div class="section">
-            <h2>Order</h2>
-            <label>Destination City: <input type="text" name="destination_city"
-                    value="{{ sample_data.destination_city }}"></label>
+            <h2>Order Details</h2>
+            <div style="margin-bottom: 15px;">
+                <label>Destination City: <input type="text" name="destination_city"
+                        value="{{ sample_data.destination_city }}"></label>
+                <label style="margin-left: 15px;">ZIP: <input type="text" name="destination_postal"
+                        value="{{ sample_data.destination_postal }}"></label>
+            </div>
             <div id="order-items">
                 {% for i in range(3) %}
                 {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
@@ -172,16 +263,18 @@
                 {% endfor %}
             </div>
             <button type="button" onclick="addItem()">Add Item</button>
-            <p>(Sample data pre-filled. Costs are fetched from UPS API based on cities, weights, and dimensions.)</p>
+            <p style="font-size: 14px; color: #7f8c8d;">Sample data pre-filled. Costs are fetched from UPS API based on
+                cities, weights, and dimensions.</p>
         </div>
 
         <div class="section">
-            <h2>Stock and Costs</h2>
+            <h2>Store Details</h2>
             <table>
                 <thead>
                     <tr>
                         <th>Store Name</th>
                         <th>Origin City</th>
+                        <th>Origin ZIP</th>
                         <th>Fixed Cost</th>
                         <th>Stock (Item:Qty)</th>
                         <th>Actions</th>
@@ -194,6 +287,8 @@
                                 oninput="updateStoreReferences(this)"></td>
                         <td><input type="text" name="origin_{{ store }}"
                                 value="{{ sample_data.origin_cities.get(store, '') }}"></td>
+                        <td><input type="text" name="origin_postal_{{ store }}"
+                                value="{{ sample_data.origin_postals.get(store, '') }}"></td>
                         <td><input type="number" name="fixed_{{ store }}" step="any"
                                 value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
                         <td>
