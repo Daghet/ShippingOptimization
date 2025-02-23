@@ -17,6 +17,7 @@ h1 {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
   margin-bottom: 30px;
   overflow: hidden;
+  width: 100%;
 }
 .section-header {
   background: #b35900;
@@ -69,8 +70,16 @@ th {
   background: #2f343d;
   padding: 10px;
   border-radius: 5px;
+  flex-wrap: wrap;
 }
-.order-entry label,
+.order-entry label {
+  margin-right: 15px;
+  display: flex;
+  align-items: center;
+}
+.order-entry label span {
+  margin-right: 5px;
+}
 .order-entry input,
 .order-entry select {
   margin-right: 15px;

@@ -6,42 +6,121 @@
     <title>Shipping Optimization with UPS</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script>
-        let itemCount = 3;
-        let storeCount = 3;
+        let itemCount = {{ sample_data.products| length }};
+        let storeCount = 4;
+
+        function reindexProducts() {
+            const productRows = document.querySelectorAll('#sample-data-table tbody tr');
+            productRows.forEach((row, i) => {
+                row.cells[0].querySelector('input').name = `product_name_${i}`;
+                row.cells[1].querySelector('input').name = `product_weight_${i}`;
+                row.cells[2].querySelector('input').name = `product_length_${i}`;
+                row.cells[3].querySelector('input').name = `product_width_${i}`;
+                row.cells[4].querySelector('input').name = `product_height_${i}`;
+            });
+        }
+
+        function reindexOrderItems() {
+            const orderItems = document.querySelectorAll('#order-items .order-entry');
+            orderItems.forEach((item, i) => {
+                item.querySelector('select').name = `order_item${i}_name`;
+                item.querySelector('input[type="number"]').name = `order_item${i}`;
+            });
+        }
+
+        function addProduct() {
+            const tableBody = document.getElementById('sample-data-table').querySelector('tbody');
+            const newRow = document.createElement('tr');
+            const newItemName = `Item ${itemCount + 1}`;
+            newRow.innerHTML = `
+                <td><input type="text" name="product_name_${itemCount}" value="${newItemName}" oninput="renameProduct(this)"></td>
+                <td><input type="number" name="product_weight_${itemCount}" value="1.0" step="any"></td>
+                <td><input type="number" name="product_length_${itemCount}" value="10" step="any"></td>
+                <td><input type="number" name="product_width_${itemCount}" value="10" step="any"></td>
+                <td><input type="number" name="product_height_${itemCount}" value="10" step="any"></td>
+                <td><span class="delete-btn" onclick="deleteProduct(this)">Delete</span></td>
+            `;
+            tableBody.appendChild(newRow);
+            itemCount++;
+            updateStoreDetails();
+            updateOrderItems();
+        }
+
+        function deleteProduct(button) {
+            const row = button.closest('tr');
+            const deletedItem = row.cells[0].querySelector('input').value;
+            row.remove();
+            removeOrderLine(deletedItem);
+            reindexProducts();
+            updateStoreDetails();
+            updateOrderItems();
+        }
+
+        function renameProduct(input) {
+            const oldName = input.dataset.oldName || input.value;
+            const newName = input.value;
+            input.dataset.oldName = newName;
+            updateOrderItemName(oldName, newName);
+            updateStoreDetails();
+            updateOrderItems();
+        }
+
+        function updateOrderItemName(oldName, newName) {
+            const orderItems = document.querySelectorAll('#order-items .order-entry select');
+            orderItems.forEach(select => {
+                const option = select.querySelector(`option[value="${oldName}"]`);
+                if (option) {
+                    option.value = newName;
+                    option.text = newName;
+                    if (select.value === oldName) select.value = newName;
+                }
+            });
+        }
+
+        function removeOrderLine(deletedItem) {
+            const orderContainer = document.getElementById('order-items');
+            const orderItems = orderContainer.querySelectorAll('.order-entry');
+            orderItems.forEach(item => {
+                const select = item.querySelector('select');
+                if (select.value === deletedItem) {
+                    item.remove();
+                }
+            });
+            reindexOrderItems();
+        }
 
         function addItem() {
             const orderContainer = document.getElementById('order-items');
-            const newOrderEntry = document.createElement('div');
-            newOrderEntry.className = 'order-entry';
-            newOrderEntry.innerHTML = `
-                <label>Item: <input type="text" name="order_item${itemCount}_name" value="Item ${itemCount + 1}"></label>
-                Quantity: <input type="number" name="order_item${itemCount}" step="any" value="0">
-                Weight (lbs): <input type="number" name="order_item${itemCount}_weight" step="any" value="1.0">
-                L (in): <input type="number" name="order_item${itemCount}_length" step="any" value="10">
-                W (in): <input type="number" name="order_item${itemCount}_width" step="any" value="10">
-                H (in): <input type="number" name="order_item${itemCount}_height" step="any" value="10">
-                <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
-            `;
-            orderContainer.appendChild(newOrderEntry);
+            const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
+            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const availableProducts = allProducts.filter(product => !orderedItems.includes(product));
 
-            const storeRows = document.querySelectorAll('.store-row');
-            storeRows.forEach(row => {
-                const stockCell = row.cells[4];
-                const storeNameInput = row.cells[0].querySelector('input');
-                const storeName = storeNameInput.value || `store${storeCount}`;
-                stockCell.innerHTML += `
-                    <div class="item-pair">
-                        <input type="text" name="stock_${storeName}_item${itemCount}_name" value="Item ${itemCount + 1}">
-                        <input type="number" name="stock_${storeName}_item${itemCount}" step="any" value="0">
-                    </div>
+            if (availableProducts.length > 0) {
+                const newOrderEntry = document.createElement('div');
+                newOrderEntry.className = 'order-entry';
+                newOrderEntry.innerHTML = `
+                    <label><span>Item:</span> 
+                        <select name="order_item${itemCount}_name">
+                            ${availableProducts.map(product => `
+                                <option value="${product}">${product}</option>
+                            `).join('')}
+                        </select>
+                    </label>
+                    <label><span>Quantity:</span> <input type="number" name="order_item${itemCount}" step="any" value="0"></label>
+                    <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
                 `;
-            });
-            itemCount++;
+                orderContainer.appendChild(newOrderEntry);
+                itemCount++;
+                reindexOrderItems();
+                updateOrderItems();
+            }
         }
 
         function deleteItem(button) {
             const entry = button.closest('.order-entry');
             entry.remove();
+            reindexOrderItems();
+            updateOrderItems();
         }
 
         function addStore() {
@@ -52,25 +131,29 @@
                 <td><input type="text" name="store${storeCount}_name" value="New Store ${storeCount + 1}" oninput="updateStoreReferences(this)"></td>
                 <td>
                     <select name="origin_country_store${storeCount}">
-                        <option value="US">United States</option>
+                        <option value="USA">USA</option>
                         <option value="CA">Canada</option>
                     </select>
                 </td>
                 <td><input type="text" name="origin_store${storeCount}" value="New City"></td>
                 <td><input type="text" name="origin_postal_store${storeCount}" value="00000"></td>
-                <td><input type="number" name="fixed_store${storeCount}" step="any" value="0"></td>
                 <td>
-                    ${Array.from({ length: itemCount }, (_, i) => `
-                        <div class="item-pair">
-                            <input type="text" name="stock_store${storeCount}_item${i}_name" value="${i < 3 ? ['Laptop', 'Mouse', 'Keyboard'][i] : 'Item ' + (i + 1)}">
-                            <input type="number" name="stock_store${storeCount}_item${i}" step="any" value="0">
-                        </div>
-                    `).join('')}
+                    ${Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map((row, i) => {
+                const item = row.cells[0].querySelector('input').value;
+                return `
+                            <div class="item-pair">
+                                <input type="text" name="stock_store${storeCount}_item${i}_name" value="${item}" readonly>
+                                <input type="number" name="stock_store${storeCount}_item${i}" step="any" value="0">
+                            </div>
+                        `;
+            }).join('')}
                 </td>
+                <td><input type="number" name="fixed_store${storeCount}" step="any" value="0"></td>
                 <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
             `;
             tableBody.appendChild(newRow);
             storeCount++;
+            updateStoreReferences(newRow.cells[0].querySelector('input'));
         }
 
         function deleteStore(button) {
@@ -84,8 +167,8 @@
             const countryInput = row.cells[1].querySelector('select');
             const originInput = row.cells[2].querySelector('input');
             const postalInput = row.cells[3].querySelector('input');
-            const fixedInput = row.cells[4].querySelector('input');
-            const stockCell = row.cells[5];
+            const stockCell = row.cells[4];
+            const fixedInput = row.cells[5].querySelector('input');
             const stockInputs = stockCell.querySelectorAll('input[type="number"]');
 
             countryInput.name = `origin_country_${newStoreName}`;
@@ -94,6 +177,10 @@
             fixedInput.name = `fixed_${newStoreName}`;
             stockInputs.forEach((input, i) => {
                 input.name = `stock_${newStoreName}_item${i}`;
+            });
+            const stockNames = stockCell.querySelectorAll('.item-pair input[type="text"]');
+            stockNames.forEach((input, i) => {
+                input.name = `stock_${newStoreName}_item${i}_name`;
             });
         }
 
@@ -104,20 +191,82 @@
             arrow.textContent = section.classList.contains('collapsed') ? '▶' : '▼';
         }
 
+        function updateOrderItems() {
+            const orderContainer = document.getElementById('order-items');
+            const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
+            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const addButton = document.getElementById('add-order-item-btn');
+
+            addButton.style.display = (orderedItems.length < allProducts.length) ? 'inline-block' : 'none';
+
+            document.querySelectorAll('.order-entry select').forEach(select => {
+                const currentValue = select.value;
+                const availableProducts = allProducts.filter(product => !orderedItems.includes(product) || product === currentValue);
+                select.innerHTML = availableProducts.map(product => `
+                    <option value="${product}" ${product === currentValue ? 'selected' : ''}>${product}</option>
+                `).join('');
+            });
+        }
+
+        function updateStoreDetails() {
+            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const storeRows = document.querySelectorAll('.store-row');
+
+            storeRows.forEach(row => {
+                const storeNameInput = row.cells[0].querySelector('input');
+                const storeName = storeNameInput.value || `store${storeCount}`;
+                const stockCell = row.cells[4];
+                const existingQuantities = {};
+                stockCell.querySelectorAll('.item-pair input[type="number"]').forEach(input => {
+                    const itemName = input.previousElementSibling.value;
+                    existingQuantities[itemName] = input.value;
+                });
+
+                stockCell.innerHTML = allProducts.map((item, i) => `
+                    <div class="item-pair">
+                        <input type="text" name="stock_${storeName}_item${i}_name" value="${item}" readonly>
+                        <input type="number" name="stock_${storeName}_item${i}" step="any" value="${existingQuantities[item] || 0}">
+                    </div>
+                `).join('');
+            });
+        }
+
         function calculateShipping() {
             console.log("Calculate button clicked");
             const form = document.querySelector('form');
             const formData = new FormData(form);
+
+            const products = {};
+            const productRows = document.querySelectorAll('#sample-data-table tbody tr');
+            productRows.forEach(row => {
+                const name = row.cells[0].querySelector('input').value;
+                products[name] = {
+                    weight: parseFloat(row.cells[1].querySelector('input').value),
+                    length: parseFloat(row.cells[2].querySelector('input').value),
+                    width: parseFloat(row.cells[3].querySelector('input').value),
+                    height: parseFloat(row.cells[4].querySelector('input').value)
+                };
+            });
+            console.log("Products:", products);
+
+            const orderQuantities = {};
+            const orderItems = document.querySelectorAll('#order-items .order-entry');
+            orderItems.forEach((item, i) => {
+                const name = item.querySelector('select').value;
+                const qty = item.querySelector('input[type="number"]').value;
+                orderQuantities[name] = parseFloat(qty);
+            });
+            console.log("Order Quantities:", orderQuantities);
+
+            formData.append('products', JSON.stringify(products));
+
             fetch('/calculate', {
                 method: 'POST',
                 body: formData
             })
-                .then(response => {
-                    console.log("Response received:", response.status);
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
-                    console.log("Data received:", data);
+                    console.log("Response Data:", data);
                     const resultDiv = document.getElementById('result');
                     if (data.error) {
                         resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
@@ -148,10 +297,9 @@
                         html += `</div>`;
                         resultDiv.innerHTML = html;
 
-                        ['order-details', 'store-details'].forEach(id => {
-                            const section = document.getElementById(id);
-                            section.classList.add('collapsed');
-                            section.querySelector('.section-header span').textContent = '▶';
+                        ['order-details', 'store-details', 'sample-data'].forEach(id => {
+                            document.getElementById(id).classList.add('collapsed');
+                            document.getElementById(id).querySelector('.section-header span').textContent = '▶';
                         });
                     }
                 })
@@ -160,12 +308,53 @@
                     document.getElementById('result').innerHTML = `<p class="error">Error: ${error.message}</p>`;
                 });
         }
+
+        window.onload = updateOrderItems;
     </script>
 </head>
 
 <body>
     <h1>Shipping Optimization with UPS</h1>
     <form>
+        <div class="section" id="sample-data">
+            <div class="section-header" onclick="toggleSection('sample-data')">
+                <h2>Sample Product Data</h2>
+                <span>▼</span>
+            </div>
+            <div class="section-content">
+                <table id="sample-data-table">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Weight (lbs)</th>
+                            <th>Length (in)</th>
+                            <th>Width (in)</th>
+                            <th>Height (in)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product, specs in sample_data.products.items() %}
+                        <tr>
+                            <td><input type="text" name="product_name_{{ loop.index0 }}" value="{{ product }}"
+                                    oninput="renameProduct(this)"></td>
+                            <td><input type="number" name="product_weight_{{ loop.index0 }}" value="{{ specs.weight }}"
+                                    step="any"></td>
+                            <td><input type="number" name="product_length_{{ loop.index0 }}" value="{{ specs.length }}"
+                                    step="any"></td>
+                            <td><input type="number" name="product_width_{{ loop.index0 }}" value="{{ specs.width }}"
+                                    step="any"></td>
+                            <td><input type="number" name="product_height_{{ loop.index0 }}" value="{{ specs.height }}"
+                                    step="any"></td>
+                            <td><span class="delete-btn" onclick="deleteProduct(this)">Delete</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="button" onclick="addProduct()">Add Item</button>
+            </div>
+        </div>
+
         <div class="section" id="order-details">
             <div class="section-header" onclick="toggleSection('order-details')">
                 <h2>Order Details</h2>
@@ -173,41 +362,38 @@
             </div>
             <div class="section-content">
                 <div style="margin-bottom: 15px;">
-                    <label>Country:
+                    <label><span>Country:</span>
                         <select name="destination_country">
-                            <option value="US" {% if sample_data.destination_country=='US' %}selected{% endif %}>United
-                                States</option>
+                            <option value="USA" {% if sample_data.destination_country=='USA' %}selected{% endif %}>USA
+                            </option>
                             <option value="CA" {% if sample_data.destination_country=='CA' %}selected{% endif %}>Canada
                             </option>
                         </select>
                     </label>
-                    <label style="margin-left: 15px;">City: <input type="text" name="destination_city"
+                    <label style="margin-left: 15px;"><span>City:</span> <input type="text" name="destination_city"
                             value="{{ sample_data.destination_city }}"></label>
-                    <label style="margin-left: 15px;">Postal Code: <input type="text" name="destination_postal"
-                            value="{{ sample_data.destination_postal }}"></label>
+                    <label style="margin-left: 15px;"><span>Postal Code:</span> <input type="text"
+                            name="destination_postal" value="{{ sample_data.destination_postal }}"></label>
                 </div>
                 <div id="order-items">
-                    {% for i in range(3) %}
-                    {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                    {% for item in sample_data.order_quantities.keys() %}
                     <div class="order-entry">
-                        <label>Item: <input type="text" name="order_item{{ i }}_name" value="{{ item }}"></label>
-                        Quantity: <input type="number" name="order_item{{ i }}" step="any"
-                            value="{{ sample_data.order_quantities.get(item, 0) }}">
-                        Weight (lbs): <input type="number" name="order_item{{ i }}_weight" step="any"
-                            value="{{ sample_data.item_weights.get(item, 1.0) }}">
-                        L (in): <input type="number" name="order_item{{ i }}_length" step="any"
-                            value="{{ sample_data.item_dimensions.get(item, {}).get('length', 10) }}">
-                        W (in): <input type="number" name="order_item{{ i }}_width" step="any"
-                            value="{{ sample_data.item_dimensions.get(item, {}).get('width', 10) }}">
-                        H (in): <input type="number" name="order_item{{ i }}_height" step="any"
-                            value="{{ sample_data.item_dimensions.get(item, {}).get('height', 10) }}">
+                        <label><span>Item:</span>
+                            <select name="order_item{{ loop.index0 }}_name">
+                                {% for product in sample_data.products.keys() %}
+                                <option value="{{ product }}" {% if product==item %}selected{% endif %}>{{ product }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label><span>Quantity:</span> <input type="number" name="order_item{{ loop.index0 }}" step="any"
+                                value="{{ sample_data.order_quantities.get(item, 0) }}"></label>
                         <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
                     </div>
                     {% endfor %}
                 </div>
-                <button type="button" onclick="addItem()">Add Item</button>
-                <p style="font-size: 14px; color: #7f8c8d;">Sample data pre-filled. Costs are fetched from UPS API based
-                    on cities, weights, and dimensions.</p>
+                <button type="button" id="add-order-item-btn" onclick="addItem()">Add Item</button>
+                <p style="font-size: 14px; color: #7f8c8d;">Specify quantities for available products.</p>
             </div>
         </div>
 
@@ -224,8 +410,8 @@
                             <th>Country</th>
                             <th>Origin City</th>
                             <th>Origin Postal Code</th>
-                            <th>Fixed Cost</th>
                             <th>Stock (Item:Qty)</th>
+                            <th>Fixed Cost</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -236,28 +422,28 @@
                                     oninput="updateStoreReferences(this)"></td>
                             <td>
                                 <select name="origin_country_{{ store }}">
-                                    <option value="US" {% if store !='Toronto Warehouse' %}selected{% endif %}>United
-                                        States</option>
-                                    <option value="CA" {% if store=='Toronto Warehouse' %}selected{% endif %}>Canada
-                                    </option>
+                                    <option value="USA" {% if sample_data.origin_countries[store]=='USA' %}selected{%
+                                        endif %}>USA</option>
+                                    <option value="CA" {% if sample_data.origin_countries[store]=='CA' %}selected{%
+                                        endif %}>Canada</option>
                                 </select>
                             </td>
                             <td><input type="text" name="origin_{{ store }}"
                                     value="{{ sample_data.origin_cities.get(store, '') }}"></td>
                             <td><input type="text" name="origin_postal_{{ store }}"
                                     value="{{ sample_data.origin_postals.get(store, '') }}"></td>
-                            <td><input type="number" name="fixed_{{ store }}" step="any"
-                                    value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
                             <td>
-                                {% for i in range(3) %}
-                                {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                                {% for item in sample_data.products.keys() %}
                                 <div class="item-pair">
-                                    <input type="text" name="stock_{{ store }}_item{{ i }}_name" value="{{ item }}">
-                                    <input type="number" name="stock_{{ store }}_item{{ i }}" step="any"
+                                    <input type="text" name="stock_{{ store }}_item{{ loop.index0 }}_name"
+                                        value="{{ item }}" readonly>
+                                    <input type="number" name="stock_{{ store }}_item{{ loop.index0 }}" step="any"
                                         value="{{ sample_data.store_inventories.get(store, {}).get(item, 0) }}">
                                 </div>
                                 {% endfor %}
                             </td>
+                            <td><input type="number" name="fixed_{{ store }}" step="any"
+                                    value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
                             <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
                         </tr>
                         {% endfor %}
