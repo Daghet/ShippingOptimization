@@ -1,11 +1,23 @@
 from flask import Flask, render_template, request
 import pulp
+import requests
+import os
+from dotenv import load_dotenv
+import base64
+
+load_dotenv()
 
 app = Flask(__name__)
 
-# Meaningful sample data with cities and shipping rates
+# Sample data with weights (in lbs) and dimensions (in inches)
 sample_data = {
     "order_quantities": {"Laptop": 3, "Mouse": 2, "Keyboard": 1},
+    "item_weights": {"Laptop": 5.0, "Mouse": 0.2, "Keyboard": 1.0},  # Weight in lbs
+    "item_dimensions": {  # LxWxH in inches
+        "Laptop": {"length": 15, "width": 10, "height": 1},
+        "Mouse": {"length": 5, "width": 3, "height": 2},
+        "Keyboard": {"length": 18, "width": 6, "height": 1}
+    },
     "destination_city": "New York",
     "store_inventories": {
         "North Warehouse": {"Laptop": 2, "Mouse": 1, "Keyboard": 0},
@@ -21,67 +33,116 @@ sample_data = {
         "North Warehouse": "Boston",
         "South Store": "Philadelphia",
         "City Outlet": "Newark",
-    },
-    "shipping_rates_per_mile": {
-        "North Warehouse": 0.5,  # $0.5 per mile
-        "South Store": 0.7,      # $0.7 per mile
-        "City Outlet": 0.6,      # $0.6 per mile
     }
 }
 
-# Mock distance function (replace with API call in production)
-def get_distance(origin, destination):
-    # Simulated distances in miles (for demo purposes)
-    distance_table = {
-        ("Boston", "New York"): 215,
-        ("Philadelphia", "New York"): 95,
-        ("Newark", "New York"): 10,
-        ("Boston", "Chicago"): 1000,
-        ("Philadelphia", "Chicago"): 800,
-        ("Newark", "Chicago"): 790,
-    }
-    # Return distance if in table, else a default value
-    return distance_table.get((origin, destination), 500)  # Default 500 miles if unknown
+UPS_CLIENT_ID = os.getenv("UPS_CLIENT_ID")
+UPS_CLIENT_SECRET = os.getenv("UPS_CLIENT_SECRET")
+UPS_TOKEN_URL = "https://onlinetools.ups.com/security/v1/oauth/token"
+UPS_API_URL = "https://onlinetools.ups.com/api/rating/v1/shop"
 
-def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shipping_costs, origin_cities, shipping_rates_per_mile, store_list, destination_city):
+def get_ups_access_token():
+    if not all([UPS_CLIENT_ID, UPS_CLIENT_SECRET]):
+        raise ValueError("UPS OAuth credentials are missing. Please set UPS_CLIENT_ID and UPS_CLIENT_SECRET in the .env file.")
+    
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+    }
+    data = {"grant_type": "client_credentials"}
+    
+    try:
+        response = requests.post(UPS_TOKEN_URL, headers=headers, data=data, auth=(UPS_CLIENT_ID, UPS_CLIENT_SECRET))
+        response.raise_for_status()
+        return response.json()["access_token"]
+    except Exception as e:
+        raise Exception(f"Failed to obtain UPS access token: {e} - Response: {response.text if 'response' in locals() else 'No response'}")
+
+def get_ups_shipping_cost(origin_city, destination_city, items_to_ship, weights, dimensions, access_token):
+    # Single package with combined weight and max dimensions
+    total_weight = sum(qty * weights[item] for item, qty in items_to_ship.items())
+    max_length = max(dimensions[item]["length"] for item in items_to_ship)
+    max_width = max(dimensions[item]["width"] for item in items_to_ship)
+    max_height = max(dimensions[item]["height"] for item in items_to_ship)
+
+    payload = {
+        "RateRequest": {
+            "Request": {
+                "TransactionReference": {"CustomerContext": "Shipping Calc"}
+            },
+            "Shipment": {
+                "Shipper": {"Address": {"City": origin_city, "CountryCode": "US"}},
+                "ShipTo": {"Address": {"City": destination_city, "CountryCode": "US"}},
+                "Package": {
+                    "PackagingType": {"Code": "02"},
+                    "Dimensions": {
+                        "UnitOfMeasurement": {"Code": "IN"},
+                        "Length": str(max_length),
+                        "Width": str(max_width),
+                        "Height": str(max_height)
+                    },
+                    "PackageWeight": {
+                        "UnitOfMeasurement": {"Code": "LBS"},
+                        "Weight": str(total_weight)
+                    }
+                },
+                "Service": {"Code": "03"}  # UPS Ground
+            }
+        }
+    }
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
+    }
+    
+    try:
+        response = requests.post(UPS_API_URL, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        cost = float(data["RateResponse"]["RatedShipment"]["TotalCharges"]["MonetaryValue"])
+        total_qty = sum(items_to_ship.values())
+        return cost / total_qty if total_qty > 0 else cost  # Cost per unit
+    except Exception as e:
+        print(f"UPS API error: {e}")
+        return 50.0  # Fallback
+
+def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shipping_costs, origin_cities, store_list, destination_city, item_weights, item_dimensions):
     ordered_items = list(order_quantities.keys())
     
-    # Check if enough inventory exists
     for item in ordered_items:
         total_available = sum(store_inventories.get(store, {}).get(item, 0) for store in store_list)
         if total_available < order_quantities[item]:
             return f"Error: Not enough stock for {item}. Required: {order_quantities[item]}, Available: {total_available}", None
     
-    # Set up the optimization problem
     shipping_problem = pulp.LpProblem("Shipping_Cost_Optimization", pulp.LpMinimize)
-    
-    # Decision variables
     use_store = pulp.LpVariable.dicts("UseStore", store_list, cat='Binary')
     items_to_ship = pulp.LpVariable.dicts("ItemsToShip", [(store, item) for store in store_list for item in ordered_items], lowBound=0, cat='Continuous')
 
-    # Calculate variable costs based on distance and rate
+    access_token = get_ups_access_token()
     variable_shipping_costs = {}
     for store in store_list:
-        distance = get_distance(origin_cities[store], destination_city)
-        rate = shipping_rates_per_mile[store]
+        temp_items = {item: order_quantities[item] for item in ordered_items}
+        cost_per_unit = get_ups_shipping_cost(origin_city=origin_cities[store], 
+                                            destination_city=destination_city, 
+                                            items_to_ship=temp_items, 
+                                            weights=item_weights, 
+                                            dimensions=item_dimensions, 
+                                            access_token=access_token)
         for item in ordered_items:
-            variable_shipping_costs[(store, item)] = distance * rate  # Cost = distance * rate per item
+            variable_shipping_costs[(store, item)] = cost_per_unit
 
-    # Objective: Minimize total shipping cost (fixed + variable)
     shipping_problem += (
         pulp.lpSum([fixed_shipping_costs[store] * use_store[store] for store in store_list]) +
         pulp.lpSum([variable_shipping_costs[(store, item)] * items_to_ship[(store, item)] for store in store_list for item in ordered_items]),
         "Total_Shipping_Cost"
     )
 
-    # Constraint: Fulfill the exact order
     for item in ordered_items:
         shipping_problem += (
             pulp.lpSum([items_to_ship[(store, item)] for store in store_list]) == order_quantities[item],
             f"Fulfill_{item}"
         )
-    
-    # Constraint: Don’t ship more than available inventory
     for store in store_list:
         for item in ordered_items:
             shipping_problem += (
@@ -89,7 +150,6 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
                 f"Stock_Limit_{store}_{item}"
             )
 
-    # Solve the problem
     shipping_problem.solve(pulp.PULP_CBC_CMD(msg=0))
     
     if pulp.LpStatus[shipping_problem.status] != 'Optimal':
@@ -119,26 +179,34 @@ def index():
 
     if request.method == 'POST':
         try:
-            # Parse destination city
             destination_city = request.form.get('destination_city', '')
 
-            # Parse order quantities
             order_quantities = {}
+            item_weights = {}
+            item_dimensions = {}
             i = 0
             while True:
                 name_key = f'order_item{i}_name'
                 qty_key = f'order_item{i}'
+                weight_key = f'order_item{i}_weight'
+                length_key = f'order_item{i}_length'
+                width_key = f'order_item{i}_width'
+                height_key = f'order_item{i}_height'
                 if name_key not in request.form:
                     break
                 item = request.form[name_key]
                 if qty_key in request.form and request.form[qty_key]:
                     order_quantities[item] = float(request.form[qty_key])
+                    item_weights[item] = float(request.form.get(weight_key, sample_data["item_weights"].get(item, 1.0)))
+                    item_dimensions[item] = {
+                        "length": float(request.form.get(length_key, sample_data["item_dimensions"].get(item, {}).get("length", 10))),
+                        "width": float(request.form.get(width_key, sample_data["item_dimensions"].get(item, {}).get("width", 10))),
+                        "height": float(request.form.get(height_key, sample_data["item_dimensions"].get(item, {}).get("height", 10)))
+                    }
                 i += 1
 
-            # Parse store list
             store_list = []
             origin_cities = {}
-            shipping_rates_per_mile = {}
             i = 0
             while True:
                 name_key = f'store{i}_name'
@@ -148,10 +216,8 @@ def index():
                 if store_name:
                     store_list.append(store_name)
                     origin_cities[store_name] = request.form.get(f'origin_{store_name}', '')
-                    shipping_rates_per_mile[store_name] = float(request.form.get(f'rate_{store_name}', 0))
                 i += 1
 
-            # Parse store inventories
             store_inventories = {}
             for store in store_list:
                 store_inventories[store] = {}
@@ -166,16 +232,14 @@ def index():
                         store_inventories[store][item] = float(request.form[qty_key])
                     i += 1
 
-            # Parse fixed shipping costs
             fixed_shipping_costs = {store: float(request.form.get(f'fixed_{store}', 0)) for store in store_list}
 
-            # Compute the optimal shipping plan
             error_message, shipping_result = calculate_optimal_shipping(
-                order_quantities, store_inventories, fixed_shipping_costs, origin_cities, shipping_rates_per_mile, store_list, destination_city
+                order_quantities, store_inventories, fixed_shipping_costs, origin_cities, store_list, destination_city, item_weights, item_dimensions
             )
         
-        except ValueError:
-            error_message = "Invalid input: Please enter numeric values."
+        except ValueError as e:
+            error_message = f"Invalid input: {str(e)}"
         except Exception as e:
             error_message = f"An error occurred: {str(e)}"
 

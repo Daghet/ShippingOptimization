@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Shipping Optimization</title>
+    <title>Shipping Optimization with UPS</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -35,6 +35,8 @@
 
         .order-entry {
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
         }
 
         .store-row td {
@@ -53,25 +55,35 @@
             display: block;
             margin-bottom: 5px;
         }
+
+        .delete-btn {
+            margin-left: 10px;
+            cursor: pointer;
+            color: red;
+        }
     </style>
     <script>
-        let itemCount = 3;  // Default 3 items
-        let storeCount = 3;  // Default 3 stores
+        let itemCount = 3;
+        let storeCount = 3;
 
         function addItem() {
             const orderContainer = document.getElementById('order-items');
             const newOrderEntry = document.createElement('div');
             newOrderEntry.className = 'order-entry';
             newOrderEntry.innerHTML = `
-                <label>Item: <input type="text" name="order_item${itemCount}_name" value="Item ${itemCount + 1}"></label> 
+                <label>Item: <input type="text" name="order_item${itemCount}_name" value="Item ${itemCount + 1}"></label>
                 Quantity: <input type="number" name="order_item${itemCount}" step="any" value="0">
+                Weight (lbs): <input type="number" name="order_item${itemCount}_weight" step="any" value="1.0">
+                L (in): <input type="number" name="order_item${itemCount}_length" step="any" value="10">
+                W (in): <input type="number" name="order_item${itemCount}_width" step="any" value="10">
+                H (in): <input type="number" name="order_item${itemCount}_height" step="any" value="10">
+                <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
             `;
             orderContainer.appendChild(newOrderEntry);
 
             const storeRows = document.querySelectorAll('.store-row');
             storeRows.forEach(row => {
-                const stockCell = row.cells[3];
-                const varCell = row.cells[4];
+                const stockCell = row.cells[2];
                 const storeNameInput = row.cells[0].querySelector('input');
                 const storeName = storeNameInput.value || `store${storeCount}`;
                 stockCell.innerHTML += `
@@ -80,14 +92,13 @@
                         <input type="number" name="stock_${storeName}_item${itemCount}" step="any" value="0">
                     </div>
                 `;
-                varCell.innerHTML += `
-                    <div class="item-pair">
-                        <input type="text" name="var_${storeName}_item${itemCount}_name" value="Item ${itemCount + 1}">
-                        <input type="number" name="var_${storeName}_item${itemCount}" step="any" value="0">
-                    </div>
-                `;
             });
             itemCount++;
+        }
+
+        function deleteItem(button) {
+            const entry = button.closest('.order-entry');
+            entry.remove();
         }
 
         function addStore() {
@@ -97,7 +108,7 @@
             newRow.innerHTML = `
                 <td><input type="text" name="store${storeCount}_name" value="New Store ${storeCount + 1}" oninput="updateStoreReferences(this)"></td>
                 <td><input type="text" name="origin_store${storeCount}" value="New City"></td>
-                <td><input type="number" name="rate_store${storeCount}" step="any" value="0.5" placeholder="$/mile"></td>
+                <td><input type="number" name="fixed_store${storeCount}" step="any" value="0"></td>
                 <td>
                     ${Array.from({ length: itemCount }, (_, i) => `
                         <div class="item-pair">
@@ -106,43 +117,36 @@
                         </div>
                     `).join('')}
                 </td>
-                <td>
-                    ${Array.from({ length: itemCount }, (_, i) => `
-                        <div class="item-pair">
-                            <input type="text" name="var_store${storeCount}_item${i}_name" value="${i < 3 ? ['Laptop', 'Mouse', 'Keyboard'][i] : 'Item ' + (i + 1)}">
-                            <input type="number" name="var_store${storeCount}_item${i}" step="any" value="0">
-                        </div>
-                    `).join('')}
-                </td>
+                <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
             `;
             tableBody.appendChild(newRow);
             storeCount++;
+        }
+
+        function deleteStore(button) {
+            const row = button.closest('.store-row');
+            row.remove();
         }
 
         function updateStoreReferences(storeInput) {
             const row = storeInput.closest('.store-row');
             const newStoreName = storeInput.value || `store${storeCount}`;
             const originInput = row.cells[1].querySelector('input');
-            const rateInput = row.cells[2].querySelector('input');
+            const fixedInput = row.cells[2].querySelector('input');
             const stockCell = row.cells[3];
-            const varCell = row.cells[4];
             const stockInputs = stockCell.querySelectorAll('input[type="number"]');
-            const varInputs = varCell.querySelectorAll('input[type="number"]');
 
             originInput.name = `origin_${newStoreName}`;
-            rateInput.name = `rate_${newStoreName}`;
+            fixedInput.name = `fixed_${newStoreName}`;
             stockInputs.forEach((input, i) => {
                 input.name = `stock_${newStoreName}_item${i}`;
-            });
-            varInputs.forEach((input, i) => {
-                input.name = `var_${newStoreName}_item${i}`;
             });
         }
     </script>
 </head>
 
 <body>
-    <h1>Shipping Optimization</h1>
+    <h1>Shipping Optimization with UPS</h1>
     <form method="POST">
         <div class="section">
             <h2>Order</h2>
@@ -155,11 +159,20 @@
                     <label>Item: <input type="text" name="order_item{{ i }}_name" value="{{ item }}"></label>
                     Quantity: <input type="number" name="order_item{{ i }}" step="any"
                         value="{{ sample_data.order_quantities.get(item, 0) }}">
+                    Weight (lbs): <input type="number" name="order_item{{ i }}_weight" step="any"
+                        value="{{ sample_data.item_weights.get(item, 1.0) }}">
+                    L (in): <input type="number" name="order_item{{ i }}_length" step="any"
+                        value="{{ sample_data.item_dimensions.get(item, {}).get('length', 10) }}">
+                    W (in): <input type="number" name="order_item{{ i }}_width" step="any"
+                        value="{{ sample_data.item_dimensions.get(item, {}).get('width', 10) }}">
+                    H (in): <input type="number" name="order_item{{ i }}_height" step="any"
+                        value="{{ sample_data.item_dimensions.get(item, {}).get('height', 10) }}">
+                    <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
                 </div>
                 {% endfor %}
             </div>
             <button type="button" onclick="addItem()">Add Item</button>
-            <p>(Sample data pre-filled for demonstration. Customize items, stores, and cities as needed.)</p>
+            <p>(Sample data pre-filled. Costs are fetched from UPS API based on cities, weights, and dimensions.)</p>
         </div>
 
         <div class="section">
@@ -169,9 +182,9 @@
                     <tr>
                         <th>Store Name</th>
                         <th>Origin City</th>
-                        <th>Shipping Rate ($/mile)</th>
+                        <th>Fixed Cost</th>
                         <th>Stock (Item:Qty)</th>
-                        <th>Variable Cost (Unused)</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="store-table-body">
@@ -181,8 +194,8 @@
                                 oninput="updateStoreReferences(this)"></td>
                         <td><input type="text" name="origin_{{ store }}"
                                 value="{{ sample_data.origin_cities.get(store, '') }}"></td>
-                        <td><input type="number" name="rate_{{ store }}" step="any"
-                                value="{{ sample_data.shipping_rates_per_mile.get(store, 0) }}"></td>
+                        <td><input type="number" name="fixed_{{ store }}" step="any"
+                                value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
                         <td>
                             {% for i in range(3) %}
                             {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
@@ -193,16 +206,7 @@
                             </div>
                             {% endfor %}
                         </td>
-                        <td>
-                            {% for i in range(3) %}
-                            {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
-                            <div class="item-pair">
-                                <input type="text" name="var_{{ store }}_item{{ i }}_name" value="{{ item }}">
-                                <input type="number" name="var_{{ store }}_item{{ i }}" step="any" value="0" disabled
-                                    title="Calculated from distance">
-                            </div>
-                            {% endfor %}
-                        </td>
+                        <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -220,7 +224,7 @@
     {% if result %}
     <div class="result">
         <h2>Results</h2>
-        <p>Total Shipping Cost: {{ result.total_cost }}</p>
+        <p>Total Shipping Cost: ${{ result.total_cost|round(2) }}</p>
         <h3>Shipping Plan:</h3>
         {% for store, items in result.plan.items() %}
         <p><strong>Ship from {{ store }}:</strong></p>
