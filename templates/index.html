@@ -9,35 +9,35 @@
             font-family: 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f4f7fa;
-            color: #333;
+            background-color: #2c2f33;
+            color: #dcdcdc;
         }
 
         h1 {
             text-align: center;
-            color: #2c3e50;
+            color: #ffffff;
             margin-bottom: 30px;
         }
 
         .section {
-            background: white;
+            background: #3a3f47;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
             margin-bottom: 30px;
         }
 
         h2 {
-            color: #34495e;
+            color: #bdc3c7;
             margin-top: 0;
-            border-bottom: 2px solid #ecf0f1;
+            border-bottom: 2px solid #4a525a;
             padding-bottom: 10px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            background: #fff;
+            background: #3a3f47;
             border-radius: 8px;
             overflow: hidden;
         }
@@ -46,11 +46,11 @@
         td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #4a525a;
         }
 
         th {
-            background: #3498db;
+            background: #7289da;
             color: white;
             font-weight: 600;
         }
@@ -59,7 +59,7 @@
             display: flex;
             align-items: center;
             margin-bottom: 15px;
-            background: #f9f9f9;
+            background: #2f343d;
             padding: 10px;
             border-radius: 5px;
         }
@@ -67,17 +67,17 @@
         .order-entry label,
         .order-entry input {
             margin-right: 15px;
-            /* Spacing between fields */
         }
 
         input[type="text"],
         input[type="number"] {
             padding: 8px;
-            border: 1px solid #ddd;
+            border: 1px solid #5c6670;
             border-radius: 4px;
             font-size: 14px;
             width: 80px;
-            /* Adjusted for uniformity */
+            background: #23272a;
+            color: #dcdcdc;
         }
 
         input[type="number"] {
@@ -96,7 +96,7 @@
 
         button {
             padding: 10px 20px;
-            background: #3498db;
+            background: #7289da;
             color: white;
             border: none;
             border-radius: 5px;
@@ -106,11 +106,11 @@
         }
 
         button:hover {
-            background: #2980b9;
+            background: #5a6eb8;
         }
 
         .delete-btn {
-            color: #e74c3c;
+            color: #ff5555;
             cursor: pointer;
             font-size: 14px;
             margin-left: 15px;
@@ -121,20 +121,20 @@
         }
 
         .error {
-            color: #e74c3c;
+            color: #ff5555;
             text-align: center;
             margin: 20px 0;
         }
 
         .result {
-            background: #ecf0f1;
+            background: #2f343d;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
         }
 
         .result h2 {
-            color: #27ae60;
+            color: #2ecc71;
         }
 
         .result ul {
@@ -144,6 +144,11 @@
 
         .result li {
             padding: 5px 0;
+        }
+
+        .breakdown {
+            margin-top: 15px;
+            font-size: 14px;
         }
     </style>
     <script>
@@ -229,12 +234,63 @@
                 input.name = `stock_${newStoreName}_item${i}`;
             });
         }
+
+        function calculateShipping() {
+            console.log("Calculate button clicked");
+            const form = document.querySelector('form');
+            const formData = new FormData(form);
+            fetch('/calculate', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => {
+                    console.log("Response received:", response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Data received:", data);
+                    const resultDiv = document.getElementById('result');
+                    if (data.error) {
+                        resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                    } else {
+                        let html = `
+                        <h2>Results</h2>
+                        <p>Total Shipping Cost: $${data.total_cost.toFixed(2)}</p>
+                        <h3>Shipping Plan:</h3>
+                    `;
+                        for (const [store, items] of Object.entries(data.plan)) {
+                            html += `<p><strong>Ship from ${store}:</strong></p><ul>`;
+                            for (const [item, qty] of Object.entries(items)) {
+                                html += `<li>${item}: ${qty}</li>`;
+                            }
+                            html += `</ul>`;
+                        }
+                        html += `<div class="breakdown"><h3>Cost Breakdown:</h3>`;
+                        for (const [store, costs] of Object.entries(data.breakdown)) {
+                            html += `
+                            <p><strong>${store}:</strong></p>
+                            <ul>
+                                <li>Shipping Cost (UPS): $${costs.shipping_cost.toFixed(2)}</li>
+                                <li>Fixed Cost: $${costs.fixed_cost.toFixed(2)}</li>
+                                <li>Total: $${(costs.shipping_cost + costs.fixed_cost).toFixed(2)}</li>
+                            </ul>
+                        `;
+                        }
+                        html += `</div>`;
+                        resultDiv.innerHTML = html;
+                    }
+                })
+                .catch(error => {
+                    console.error("Fetch error:", error);
+                    document.getElementById('result').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                });
+        }
     </script>
 </head>
 
 <body>
     <h1>Shipping Optimization with UPS</h1>
-    <form method="POST">
+    <form>
         <div class="section">
             <h2>Order Details</h2>
             <div style="margin-bottom: 15px;">
@@ -309,28 +365,10 @@
             <button type="button" onclick="addStore()">Add Store</button>
         </div>
 
-        <button type="submit">Calculate</button>
+        <button type="button" onclick="calculateShipping()">Calculate</button>
     </form>
 
-    {% if error %}
-    <p class="error">{{ error }}</p>
-    {% endif %}
-
-    {% if result %}
-    <div class="result">
-        <h2>Results</h2>
-        <p>Total Shipping Cost: ${{ result.total_cost|round(2) }}</p>
-        <h3>Shipping Plan:</h3>
-        {% for store, items in result.plan.items() %}
-        <p><strong>Ship from {{ store }}:</strong></p>
-        <ul>
-            {% for item, qty in items.items() %}
-            <li>{{ item }}: {{ qty }}</li>
-            {% endfor %}
-        </ul>
-        {% endfor %}
-    </div>
-    {% endif %}
+    <div id="result"></div>
 </body>
 
 </html>
