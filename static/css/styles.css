@@ -156,3 +156,11 @@ button:hover {
   margin-top: 15px;
   font-size: 14px;
 }
+.timing {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #dcdcdc;
+}
+.timing h3 {
+  color: #2ecc71;
+}

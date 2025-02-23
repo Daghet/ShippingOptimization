@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 import base64
 import logging
+import time
 
 load_dotenv()
 
@@ -74,10 +75,23 @@ def get_ups_access_token():
         raise Exception(f"Failed to obtain UPS access token: {e}")
 
 def get_ups_shipping_cost(origin_city, origin_postal, origin_country, destination_city, destination_postal, destination_country, items_to_ship, products, access_token):
-    total_weight = sum(qty * products[item]["weight"] for item in items_to_ship)
-    max_length = max(products[item]["length"] for item in items_to_ship)
-    max_width = max(products[item]["width"] for item in items_to_ship)
-    max_height = max(products[item]["height"] for item in items_to_ship)
+    logger.debug(f"Calling get_ups_shipping_cost with items_to_ship: {items_to_ship}")
+    for item in items_to_ship:
+        if item not in products:
+            logger.warning(f"Item '{item}' not in products, using default dimensions")
+            products[item] = {"weight": 1.0, "length": 10, "width": 10, "height": 10}
+    total_weight = 0.0
+    lengths = []
+    widths = []
+    heights = []
+    for item, quantity in items_to_ship.items():
+        total_weight += quantity * products[item]["weight"]
+        lengths.append(products[item]["length"])
+        widths.append(products[item]["width"])
+        heights.append(products[item]["height"])
+    max_length = max(lengths)
+    max_width = max(widths)
+    max_height = max(heights)
 
     payload = {
         "RateRequest": {
@@ -190,6 +204,7 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
             if items:
                 shipping_plan[store] = items
                 shipped_items = {item: qty for item, qty in items.items()}
+                logger.debug(f"Calculating final cost for store {store} with shipped_items: {shipped_items}")
                 shipped_total_cost, _ = get_ups_shipping_cost(
                     origin_city=origin_cities[store], 
                     origin_postal=origin_postals[store],
@@ -218,6 +233,8 @@ def index():
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
+        start_time = time.time()
+        
         destination_country = request.form.get('destination_country', 'USA')
         destination_city = request.form.get('destination_city', '')
         destination_postal = request.form.get('destination_postal', '')
@@ -285,13 +302,26 @@ def calculate():
 
         fixed_shipping_costs = {store: float(request.form.get(f'fixed_{store}', 0)) for store in store_list}
 
+        api_start_time = time.time()
         error_message, shipping_result = calculate_optimal_shipping(
             order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, origin_countries, store_list, destination_city, destination_postal, products, destination_country
         )
+        api_end_time = time.time()
+
+        end_time = time.time()
         
+        total_time = end_time - start_time
+        api_time = api_end_time - api_start_time
+        local_time = total_time - api_time
+
         if error_message:
             logger.error(f"Optimization error: {error_message}")
             return jsonify({"error": error_message})
+        shipping_result["timing"] = {
+            "total_time": total_time * 1000,  # Convert to ms
+            "api_time": api_time * 1000,
+            "local_time": local_time * 1000
+        }
         return jsonify(shipping_result)
     except Exception as e:
         logger.error(f"Calculate error: {str(e)}")

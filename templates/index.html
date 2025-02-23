@@ -28,10 +28,27 @@
             });
         }
 
+        function getAllProductNames() {
+            return Array.from(document.querySelectorAll('#sample-data-table tbody tr'))
+                .map(row => row.cells[0].querySelector('input').value.trim());
+        }
+
+        function isProductNameUnique(name, excludeInput = null) {
+            const allNames = getAllProductNames();
+            return !allNames.some((existingName, i) =>
+                existingName.toLowerCase() === name.toLowerCase() &&
+                (excludeInput ? existingName !== excludeInput.value : true)
+            );
+        }
+
         function addProduct() {
             const tableBody = document.getElementById('sample-data-table').querySelector('tbody');
+            let newItemName = `Item ${itemCount + 1}`;
+            let suffix = 1;
+            while (!isProductNameUnique(newItemName)) {
+                newItemName = `Item ${itemCount + 1}-${suffix++}`;
+            }
             const newRow = document.createElement('tr');
-            const newItemName = `Item ${itemCount + 1}`;
             newRow.innerHTML = `
                 <td><input type="text" name="product_name_${itemCount}" value="${newItemName}" oninput="renameProduct(this)"></td>
                 <td><input type="number" name="product_weight_${itemCount}" value="1.0" step="any"></td>
@@ -44,6 +61,7 @@
             itemCount++;
             updateStoreDetails();
             updateOrderItems();
+            reindexProducts();
         }
 
         function deleteProduct(button) {
@@ -58,11 +76,23 @@
 
         function renameProduct(input) {
             const oldName = input.dataset.oldName || input.value;
-            const newName = input.value;
+            const newName = input.value.trim();
+            if (newName === oldName) return;
+            if (!newName) {
+                alert("Product name cannot be empty.");
+                input.value = oldName;
+                return;
+            }
+            if (!isProductNameUnique(newName, input)) {
+                alert(`Product name '${newName}' already exists. Names must be unique.`);
+                input.value = oldName;
+                return;
+            }
             input.dataset.oldName = newName;
             updateOrderItemName(oldName, newName);
             updateStoreDetails();
             updateOrderItems();
+            reindexProducts();
         }
 
         function updateOrderItemName(oldName, newName) {
@@ -92,7 +122,7 @@
         function addItem() {
             const orderContainer = document.getElementById('order-items');
             const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
-            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const allProducts = getAllProductNames();
             const availableProducts = allProducts.filter(product => !orderedItems.includes(product));
 
             if (availableProducts.length > 0) {
@@ -194,7 +224,7 @@
         function updateOrderItems() {
             const orderContainer = document.getElementById('order-items');
             const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
-            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const allProducts = getAllProductNames();
             const addButton = document.getElementById('add-order-item-btn');
 
             addButton.style.display = (orderedItems.length < allProducts.length) ? 'inline-block' : 'none';
@@ -209,7 +239,7 @@
         }
 
         function updateStoreDetails() {
-            const allProducts = Array.from(document.querySelectorAll('#sample-data-table tbody tr')).map(row => row.cells[0].querySelector('input').value);
+            const allProducts = getAllProductNames();
             const storeRows = document.querySelectorAll('.store-row');
 
             storeRows.forEach(row => {
@@ -236,29 +266,17 @@
             const form = document.querySelector('form');
             const formData = new FormData(form);
 
-            const products = {};
             const productRows = document.querySelectorAll('#sample-data-table tbody tr');
-            productRows.forEach(row => {
+            productRows.forEach((row, i) => {
                 const name = row.cells[0].querySelector('input').value;
-                products[name] = {
-                    weight: parseFloat(row.cells[1].querySelector('input').value),
-                    length: parseFloat(row.cells[2].querySelector('input').value),
-                    width: parseFloat(row.cells[3].querySelector('input').value),
-                    height: parseFloat(row.cells[4].querySelector('input').value)
-                };
+                formData.set(`product_name_${i}`, name);
+                formData.set(`product_weight_${i}`, row.cells[1].querySelector('input').value);
+                formData.set(`product_length_${i}`, row.cells[2].querySelector('input').value);
+                formData.set(`product_width_${i}`, row.cells[3].querySelector('input').value);
+                formData.set(`product_height_${i}`, row.cells[4].querySelector('input').value);
             });
-            console.log("Products:", products);
 
-            const orderQuantities = {};
-            const orderItems = document.querySelectorAll('#order-items .order-entry');
-            orderItems.forEach((item, i) => {
-                const name = item.querySelector('select').value;
-                const qty = item.querySelector('input[type="number"]').value;
-                orderQuantities[name] = parseFloat(qty);
-            });
-            console.log("Order Quantities:", orderQuantities);
-
-            formData.append('products', JSON.stringify(products));
+            const startTime = performance.now();
 
             fetch('/calculate', {
                 method: 'POST',
@@ -266,16 +284,19 @@
             })
                 .then(response => response.json())
                 .then(data => {
+                    const endTime = performance.now();
+                    const clientTotalTime = (endTime - startTime).toFixed(2);
+
                     console.log("Response Data:", data);
                     const resultDiv = document.getElementById('result');
                     if (data.error) {
                         resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
                     } else {
                         let html = `
-                        <h2>Results</h2>
-                        <p>Total Shipping Cost: $${data.total_cost.toFixed(2)}</p>
-                        <h3>Shipping Plan:</h3>
-                    `;
+                            <h2>Results</h2>
+                            <p>Total Shipping Cost: $${data.total_cost.toFixed(2)}</p>
+                            <h3>Shipping Plan:</h3>
+                        `;
                         for (const [store, items] of Object.entries(data.plan)) {
                             html += `<p><strong>Ship from ${store}:</strong></p><ul>`;
                             for (const [item, qty] of Object.entries(items)) {
@@ -286,15 +307,24 @@
                         html += `<div class="breakdown"><h3>Cost Breakdown:</h3>`;
                         for (const [store, costs] of Object.entries(data.breakdown)) {
                             html += `
-                            <p><strong>${store}:</strong></p>
-                            <ul>
-                                <li>Shipping Cost (UPS): $${costs.shipping_cost.toFixed(2)}</li>
-                                <li>Fixed Cost: $${costs.fixed_cost.toFixed(2)}</li>
-                                <li>Total: $${(costs.shipping_cost + costs.fixed_cost).toFixed(2)}</li>
-                            </ul>
-                        `;
+                                <p><strong>${store}:</strong></p>
+                                <ul>
+                                    <li>Shipping Cost (UPS): $${costs.shipping_cost.toFixed(2)}</li>
+                                    <li>Fixed Cost: $${costs.fixed_cost.toFixed(2)}</li>
+                                    <li>Total: $${(costs.shipping_cost + costs.fixed_cost).toFixed(2)}</li>
+                                </ul>
+                            `;
                         }
                         html += `</div>`;
+                        html += `
+                            <div class="timing">
+                                <h3>Performance Timing:</h3>
+                                <p>Client Total Time: ${clientTotalTime} ms</p>
+                                <p>Server Total Time: ${data.timing.total_time.toFixed(2)} ms</p>
+                                <p>Server API Time: ${data.timing.api_time.toFixed(2)} ms</p>
+                                <p>Server Local Computation Time: ${data.timing.local_time.toFixed(2)} ms</p>
+                            </div>
+                        `;
                         resultDiv.innerHTML = html;
 
                         ['order-details', 'store-details', 'sample-data'].forEach(id => {
