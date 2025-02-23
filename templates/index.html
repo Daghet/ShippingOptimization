@@ -89,6 +89,13 @@
             });
         }
 
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            section.classList.toggle('collapsed');
+            const arrow = section.querySelector('.section-header span');
+            arrow.textContent = section.classList.contains('collapsed') ? '▶' : '▼';
+        }
+
         function calculateShipping() {
             console.log("Calculate button clicked");
             const form = document.querySelector('form');
@@ -132,6 +139,13 @@
                         }
                         html += `</div>`;
                         resultDiv.innerHTML = html;
+
+                        // Auto-collapse sections and update arrows
+                        ['order-details', 'store-details'].forEach(id => {
+                            const section = document.getElementById(id);
+                            section.classList.add('collapsed');
+                            section.querySelector('.section-header span').textContent = '▶';
+                        });
                     }
                 })
                 .catch(error => {
@@ -145,78 +159,88 @@
 <body>
     <h1>Shipping Optimization with UPS</h1>
     <form>
-        <div class="section">
-            <h2>Order Details</h2>
-            <div style="margin-bottom: 15px;">
-                <label>Destination City: <input type="text" name="destination_city"
-                        value="{{ sample_data.destination_city }}"></label>
-                <label style="margin-left: 15px;">ZIP: <input type="text" name="destination_postal"
-                        value="{{ sample_data.destination_postal }}"></label>
+        <div class="section" id="order-details">
+            <div class="section-header" onclick="toggleSection('order-details')">
+                <h2>Order Details</h2>
+                <span>▼</span>
             </div>
-            <div id="order-items">
-                {% for i in range(3) %}
-                {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
-                <div class="order-entry">
-                    <label>Item: <input type="text" name="order_item{{ i }}_name" value="{{ item }}"></label>
-                    Quantity: <input type="number" name="order_item{{ i }}" step="any"
-                        value="{{ sample_data.order_quantities.get(item, 0) }}">
-                    Weight (lbs): <input type="number" name="order_item{{ i }}_weight" step="any"
-                        value="{{ sample_data.item_weights.get(item, 1.0) }}">
-                    L (in): <input type="number" name="order_item{{ i }}_length" step="any"
-                        value="{{ sample_data.item_dimensions.get(item, {}).get('length', 10) }}">
-                    W (in): <input type="number" name="order_item{{ i }}_width" step="any"
-                        value="{{ sample_data.item_dimensions.get(item, {}).get('width', 10) }}">
-                    H (in): <input type="number" name="order_item{{ i }}_height" step="any"
-                        value="{{ sample_data.item_dimensions.get(item, {}).get('height', 10) }}">
-                    <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
+            <div class="section-content">
+                <div style="margin-bottom: 15px;">
+                    <label>Destination City: <input type="text" name="destination_city"
+                            value="{{ sample_data.destination_city }}"></label>
+                    <label style="margin-left: 15px;">ZIP: <input type="text" name="destination_postal"
+                            value="{{ sample_data.destination_postal }}"></label>
                 </div>
-                {% endfor %}
+                <div id="order-items">
+                    {% for i in range(3) %}
+                    {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                    <div class="order-entry">
+                        <label>Item: <input type="text" name="order_item{{ i }}_name" value="{{ item }}"></label>
+                        Quantity: <input type="number" name="order_item{{ i }}" step="any"
+                            value="{{ sample_data.order_quantities.get(item, 0) }}">
+                        Weight (lbs): <input type="number" name="order_item{{ i }}_weight" step="any"
+                            value="{{ sample_data.item_weights.get(item, 1.0) }}">
+                        L (in): <input type="number" name="order_item{{ i }}_length" step="any"
+                            value="{{ sample_data.item_dimensions.get(item, {}).get('length', 10) }}">
+                        W (in): <input type="number" name="order_item{{ i }}_width" step="any"
+                            value="{{ sample_data.item_dimensions.get(item, {}).get('width', 10) }}">
+                        H (in): <input type="number" name="order_item{{ i }}_height" step="any"
+                            value="{{ sample_data.item_dimensions.get(item, {}).get('height', 10) }}">
+                        <span class="delete-btn" onclick="deleteItem(this)">Delete</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" onclick="addItem()">Add Item</button>
+                <p style="font-size: 14px; color: #7f8c8d;">Sample data pre-filled. Costs are fetched from UPS API based
+                    on cities, weights, and dimensions.</p>
             </div>
-            <button type="button" onclick="addItem()">Add Item</button>
-            <p style="font-size: 14px; color: #7f8c8d;">Sample data pre-filled. Costs are fetched from UPS API based on
-                cities, weights, and dimensions.</p>
         </div>
 
-        <div class="section">
-            <h2>Store Details</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Store Name</th>
-                        <th>Origin City</th>
-                        <th>Origin ZIP</th>
-                        <th>Fixed Cost</th>
-                        <th>Stock (Item:Qty)</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="store-table-body">
-                    {% for store in stores %}
-                    <tr class="store-row">
-                        <td><input type="text" name="store{{ loop.index0 }}_name" value="{{ store }}"
-                                oninput="updateStoreReferences(this)"></td>
-                        <td><input type="text" name="origin_{{ store }}"
-                                value="{{ sample_data.origin_cities.get(store, '') }}"></td>
-                        <td><input type="text" name="origin_postal_{{ store }}"
-                                value="{{ sample_data.origin_postals.get(store, '') }}"></td>
-                        <td><input type="number" name="fixed_{{ store }}" step="any"
-                                value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
-                        <td>
-                            {% for i in range(3) %}
-                            {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
-                            <div class="item-pair">
-                                <input type="text" name="stock_{{ store }}_item{{ i }}_name" value="{{ item }}">
-                                <input type="number" name="stock_{{ store }}_item{{ i }}" step="any"
-                                    value="{{ sample_data.store_inventories.get(store, {}).get(item, 0) }}">
-                            </div>
-                            {% endfor %}
-                        </td>
-                        <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            <button type="button" onclick="addStore()">Add Store</button>
+        <div class="section" id="store-details">
+            <div class="section-header" onclick="toggleSection('store-details')">
+                <h2>Store Details</h2>
+                <span>▼</span>
+            </div>
+            <div class="section-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Store Name</th>
+                            <th>Origin City</th>
+                            <th>Origin ZIP</th>
+                            <th>Fixed Cost</th>
+                            <th>Stock (Item:Qty)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="store-table-body">
+                        {% for store in stores %}
+                        <tr class="store-row">
+                            <td><input type="text" name="store{{ loop.index0 }}_name" value="{{ store }}"
+                                    oninput="updateStoreReferences(this)"></td>
+                            <td><input type="text" name="origin_{{ store }}"
+                                    value="{{ sample_data.origin_cities.get(store, '') }}"></td>
+                            <td><input type="text" name="origin_postal_{{ store }}"
+                                    value="{{ sample_data.origin_postals.get(store, '') }}"></td>
+                            <td><input type="number" name="fixed_{{ store }}" step="any"
+                                    value="{{ sample_data.fixed_shipping_costs.get(store, 0) }}"></td>
+                            <td>
+                                {% for i in range(3) %}
+                                {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                                <div class="item-pair">
+                                    <input type="text" name="stock_{{ store }}_item{{ i }}_name" value="{{ item }}">
+                                    <input type="number" name="stock_{{ store }}_item{{ i }}" step="any"
+                                        value="{{ sample_data.store_inventories.get(store, {}).get(item, 0) }}">
+                                </div>
+                                {% endfor %}
+                            </td>
+                            <td><span class="delete-btn" onclick="deleteStore(this)">Delete</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="button" onclick="addStore()">Add Store</button>
+            </div>
         </div>
 
         <button type="button" onclick="calculateShipping()">Calculate</button>
