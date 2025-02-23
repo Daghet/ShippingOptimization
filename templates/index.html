@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Shipping Optimization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .result {
+            color: green;
+        }
+
+        .order-entry {
+            margin-bottom: 5px;
+        }
+
+        .store-row td {
+            vertical-align: top;
+        }
+
+        input[type="text"] {
+            width: 100px;
+        }
+
+        input[type="number"] {
+            width: 60px;
+        }
+
+        .item-pair {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+    <script>
+        let itemCount = 3;  // Default 3 items
+        let storeCount = 3;  // Default 3 stores
+
+        function addItem() {
+            const orderContainer = document.getElementById('order-items');
+            const newOrderEntry = document.createElement('div');
+            newOrderEntry.className = 'order-entry';
+            newOrderEntry.innerHTML = `
+                <label>Item: <input type="text" name="order_item${itemCount}_name" value="Item ${itemCount + 1}"></label> 
+                Quantity: <input type="number" name="order_item${itemCount}" step="any" value="0">
+            `;
+            orderContainer.appendChild(newOrderEntry);
+
+            const storeRows = document.querySelectorAll('.store-row');
+            storeRows.forEach(row => {
+                const stockCell = row.cells[3];
+                const varCell = row.cells[4];
+                const storeNameInput = row.cells[0].querySelector('input');
+                const storeName = storeNameInput.value || `store${storeCount}`;
+                stockCell.innerHTML += `
+                    <div class="item-pair">
+                        <input type="text" name="stock_${storeName}_item${itemCount}_name" value="Item ${itemCount + 1}">
+                        <input type="number" name="stock_${storeName}_item${itemCount}" step="any" value="0">
+                    </div>
+                `;
+                varCell.innerHTML += `
+                    <div class="item-pair">
+                        <input type="text" name="var_${storeName}_item${itemCount}_name" value="Item ${itemCount + 1}">
+                        <input type="number" name="var_${storeName}_item${itemCount}" step="any" value="0">
+                    </div>
+                `;
+            });
+            itemCount++;
+        }
+
+        function addStore() {
+            const tableBody = document.getElementById('store-table-body');
+            const newRow = document.createElement('tr');
+            newRow.className = 'store-row';
+            newRow.innerHTML = `
+                <td><input type="text" name="store${storeCount}_name" value="New Store ${storeCount + 1}" oninput="updateStoreReferences(this)"></td>
+                <td><input type="text" name="origin_store${storeCount}" value="New City"></td>
+                <td><input type="number" name="rate_store${storeCount}" step="any" value="0.5" placeholder="$/mile"></td>
+                <td>
+                    ${Array.from({ length: itemCount }, (_, i) => `
+                        <div class="item-pair">
+                            <input type="text" name="stock_store${storeCount}_item${i}_name" value="${i < 3 ? ['Laptop', 'Mouse', 'Keyboard'][i] : 'Item ' + (i + 1)}">
+                            <input type="number" name="stock_store${storeCount}_item${i}" step="any" value="0">
+                        </div>
+                    `).join('')}
+                </td>
+                <td>
+                    ${Array.from({ length: itemCount }, (_, i) => `
+                        <div class="item-pair">
+                            <input type="text" name="var_store${storeCount}_item${i}_name" value="${i < 3 ? ['Laptop', 'Mouse', 'Keyboard'][i] : 'Item ' + (i + 1)}">
+                            <input type="number" name="var_store${storeCount}_item${i}" step="any" value="0">
+                        </div>
+                    `).join('')}
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            storeCount++;
+        }
+
+        function updateStoreReferences(storeInput) {
+            const row = storeInput.closest('.store-row');
+            const newStoreName = storeInput.value || `store${storeCount}`;
+            const originInput = row.cells[1].querySelector('input');
+            const rateInput = row.cells[2].querySelector('input');
+            const stockCell = row.cells[3];
+            const varCell = row.cells[4];
+            const stockInputs = stockCell.querySelectorAll('input[type="number"]');
+            const varInputs = varCell.querySelectorAll('input[type="number"]');
+
+            originInput.name = `origin_${newStoreName}`;
+            rateInput.name = `rate_${newStoreName}`;
+            stockInputs.forEach((input, i) => {
+                input.name = `stock_${newStoreName}_item${i}`;
+            });
+            varInputs.forEach((input, i) => {
+                input.name = `var_${newStoreName}_item${i}`;
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <h1>Shipping Optimization</h1>
+    <form method="POST">
+        <div class="section">
+            <h2>Order</h2>
+            <label>Destination City: <input type="text" name="destination_city"
+                    value="{{ sample_data.destination_city }}"></label>
+            <div id="order-items">
+                {% for i in range(3) %}
+                {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                <div class="order-entry">
+                    <label>Item: <input type="text" name="order_item{{ i }}_name" value="{{ item }}"></label>
+                    Quantity: <input type="number" name="order_item{{ i }}" step="any"
+                        value="{{ sample_data.order_quantities.get(item, 0) }}">
+                </div>
+                {% endfor %}
+            </div>
+            <button type="button" onclick="addItem()">Add Item</button>
+            <p>(Sample data pre-filled for demonstration. Customize items, stores, and cities as needed.)</p>
+        </div>
+
+        <div class="section">
+            <h2>Stock and Costs</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Store Name</th>
+                        <th>Origin City</th>
+                        <th>Shipping Rate ($/mile)</th>
+                        <th>Stock (Item:Qty)</th>
+                        <th>Variable Cost (Unused)</th>
+                    </tr>
+                </thead>
+                <tbody id="store-table-body">
+                    {% for store in stores %}
+                    <tr class="store-row">
+                        <td><input type="text" name="store{{ loop.index0 }}_name" value="{{ store }}"
+                                oninput="updateStoreReferences(this)"></td>
+                        <td><input type="text" name="origin_{{ store }}"
+                                value="{{ sample_data.origin_cities.get(store, '') }}"></td>
+                        <td><input type="number" name="rate_{{ store }}" step="any"
+                                value="{{ sample_data.shipping_rates_per_mile.get(store, 0) }}"></td>
+                        <td>
+                            {% for i in range(3) %}
+                            {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                            <div class="item-pair">
+                                <input type="text" name="stock_{{ store }}_item{{ i }}_name" value="{{ item }}">
+                                <input type="number" name="stock_{{ store }}_item{{ i }}" step="any"
+                                    value="{{ sample_data.store_inventories.get(store, {}).get(item, 0) }}">
+                            </div>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% for i in range(3) %}
+                            {% set item = ['Laptop', 'Mouse', 'Keyboard'][i] %}
+                            <div class="item-pair">
+                                <input type="text" name="var_{{ store }}_item{{ i }}_name" value="{{ item }}">
+                                <input type="number" name="var_{{ store }}_item{{ i }}" step="any" value="0" disabled
+                                    title="Calculated from distance">
+                            </div>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <button type="button" onclick="addStore()">Add Store</button>
+        </div>
+
+        <button type="submit">Calculate</button>
+    </form>
+
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if result %}
+    <div class="result">
+        <h2>Results</h2>
+        <p>Total Shipping Cost: {{ result.total_cost }}</p>
+        <h3>Shipping Plan:</h3>
+        {% for store, items in result.plan.items() %}
+        <p><strong>Ship from {{ store }}:</strong></p>
+        <ul>
+            {% for item, qty in items.items() %}
+            <li>{{ item }}: {{ qty }}</li>
+            {% endfor %}
+        </ul>
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+
+</html>
