@@ -26,7 +26,7 @@
 
             const storeRows = document.querySelectorAll('.store-row');
             storeRows.forEach(row => {
-                const stockCell = row.cells[3];
+                const stockCell = row.cells[4];
                 const storeNameInput = row.cells[0].querySelector('input');
                 const storeName = storeNameInput.value || `store${storeCount}`;
                 stockCell.innerHTML += `
@@ -50,6 +50,12 @@
             newRow.className = 'store-row';
             newRow.innerHTML = `
                 <td><input type="text" name="store${storeCount}_name" value="New Store ${storeCount + 1}" oninput="updateStoreReferences(this)"></td>
+                <td>
+                    <select name="origin_country_store${storeCount}">
+                        <option value="US">United States</option>
+                        <option value="CA">Canada</option>
+                    </select>
+                </td>
                 <td><input type="text" name="origin_store${storeCount}" value="New City"></td>
                 <td><input type="text" name="origin_postal_store${storeCount}" value="00000"></td>
                 <td><input type="number" name="fixed_store${storeCount}" step="any" value="0"></td>
@@ -75,12 +81,14 @@
         function updateStoreReferences(storeInput) {
             const row = storeInput.closest('.store-row');
             const newStoreName = storeInput.value || `store${storeCount}`;
-            const originInput = row.cells[1].querySelector('input');
-            const postalInput = row.cells[2].querySelector('input');
-            const fixedInput = row.cells[3].querySelector('input');
-            const stockCell = row.cells[4];
+            const countryInput = row.cells[1].querySelector('select');
+            const originInput = row.cells[2].querySelector('input');
+            const postalInput = row.cells[3].querySelector('input');
+            const fixedInput = row.cells[4].querySelector('input');
+            const stockCell = row.cells[5];
             const stockInputs = stockCell.querySelectorAll('input[type="number"]');
 
+            countryInput.name = `origin_country_${newStoreName}`;
             originInput.name = `origin_${newStoreName}`;
             postalInput.name = `origin_postal_${newStoreName}`;
             fixedInput.name = `fixed_${newStoreName}`;
@@ -140,7 +148,6 @@
                         html += `</div>`;
                         resultDiv.innerHTML = html;
 
-                        // Auto-collapse sections and update arrows
                         ['order-details', 'store-details'].forEach(id => {
                             const section = document.getElementById(id);
                             section.classList.add('collapsed');
@@ -166,9 +173,17 @@
             </div>
             <div class="section-content">
                 <div style="margin-bottom: 15px;">
-                    <label>Destination City: <input type="text" name="destination_city"
+                    <label>Country:
+                        <select name="destination_country">
+                            <option value="US" {% if sample_data.destination_country=='US' %}selected{% endif %}>United
+                                States</option>
+                            <option value="CA" {% if sample_data.destination_country=='CA' %}selected{% endif %}>Canada
+                            </option>
+                        </select>
+                    </label>
+                    <label style="margin-left: 15px;">City: <input type="text" name="destination_city"
                             value="{{ sample_data.destination_city }}"></label>
-                    <label style="margin-left: 15px;">ZIP: <input type="text" name="destination_postal"
+                    <label style="margin-left: 15px;">Postal Code: <input type="text" name="destination_postal"
                             value="{{ sample_data.destination_postal }}"></label>
                 </div>
                 <div id="order-items">
@@ -206,8 +221,9 @@
                     <thead>
                         <tr>
                             <th>Store Name</th>
+                            <th>Country</th>
                             <th>Origin City</th>
-                            <th>Origin ZIP</th>
+                            <th>Origin Postal Code</th>
                             <th>Fixed Cost</th>
                             <th>Stock (Item:Qty)</th>
                             <th>Actions</th>
@@ -218,6 +234,14 @@
                         <tr class="store-row">
                             <td><input type="text" name="store{{ loop.index0 }}_name" value="{{ store }}"
                                     oninput="updateStoreReferences(this)"></td>
+                            <td>
+                                <select name="origin_country_{{ store }}">
+                                    <option value="US" {% if store !='Toronto Warehouse' %}selected{% endif %}>United
+                                        States</option>
+                                    <option value="CA" {% if store=='Toronto Warehouse' %}selected{% endif %}>Canada
+                                    </option>
+                                </select>
+                            </td>
                             <td><input type="text" name="origin_{{ store }}"
                                     value="{{ sample_data.origin_cities.get(store, '') }}"></td>
                             <td><input type="text" name="origin_postal_{{ store }}"

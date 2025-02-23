@@ -9,7 +9,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Sample data with fixed costs set to zero
+# Sample data with a Canadian store
 sample_data = {
     "order_quantities": {"Laptop": 3, "Mouse": 2, "Keyboard": 1},
     "item_weights": {"Laptop": 5.0, "Mouse": 0.2, "Keyboard": 1.0},
@@ -18,27 +18,38 @@ sample_data = {
         "Mouse": {"length": 5, "width": 3, "height": 2},
         "Keyboard": {"length": 18, "width": 6, "height": 1}
     },
+    "destination_country": "US",
     "destination_city": "New York",
     "destination_postal": "10001",
     "store_inventories": {
         "North Warehouse": {"Laptop": 2, "Mouse": 1, "Keyboard": 0},
         "South Store": {"Laptop": 1, "Mouse": 2, "Keyboard": 1},
         "City Outlet": {"Laptop": 0, "Mouse": 0, "Keyboard": 0},
+        "Toronto Warehouse": {"Laptop": 1, "Mouse": 1, "Keyboard": 1}  # Added Canadian store
     },
     "fixed_shipping_costs": {
         "North Warehouse": 0,
         "South Store": 0,
         "City Outlet": 0,
+        "Toronto Warehouse": 0
     },
     "origin_cities": {
         "North Warehouse": "Boston",
         "South Store": "Philadelphia",
         "City Outlet": "Newark",
+        "Toronto Warehouse": "Toronto"
     },
     "origin_postals": {
         "North Warehouse": "02108",
         "South Store": "19102",
         "City Outlet": "07102",
+        "Toronto Warehouse": "M5V 2T6"  # Canadian postal code
+    },
+    "origin_countries": {  # Added country mapping
+        "North Warehouse": "US",
+        "South Store": "US",
+        "City Outlet": "US",
+        "Toronto Warehouse": "CA"
     }
 }
 
@@ -59,7 +70,7 @@ def get_ups_access_token():
     except Exception as e:
         raise Exception(f"Failed to obtain UPS access token: {e}")
 
-def get_ups_shipping_cost(origin_city, origin_postal, destination_city, destination_postal, items_to_ship, weights, dimensions, access_token):
+def get_ups_shipping_cost(origin_city, origin_postal, origin_country, destination_city, destination_postal, destination_country, items_to_ship, weights, dimensions, access_token):
     total_weight = sum(qty * weights[item] for item, qty in items_to_ship.items())
     max_length = max(dimensions[item]["length"] for item in items_to_ship)
     max_width = max(dimensions[item]["width"] for item in items_to_ship)
@@ -69,8 +80,8 @@ def get_ups_shipping_cost(origin_city, origin_postal, destination_city, destinat
         "RateRequest": {
             "Request": {"TransactionReference": {"CustomerContext": "Shipping Calc"}},
             "Shipment": {
-                "Shipper": {"Address": {"City": origin_city, "PostalCode": origin_postal, "CountryCode": "US"}},
-                "ShipTo": {"Address": {"City": destination_city, "PostalCode": destination_postal, "CountryCode": "US"}},
+                "Shipper": {"Address": {"City": origin_city, "PostalCode": origin_postal, "CountryCode": origin_country}},
+                "ShipTo": {"Address": {"City": destination_city, "PostalCode": destination_postal, "CountryCode": destination_country}},
                 "Package": {
                     "PackagingType": {"Code": "02"},
                     "Dimensions": {"UnitOfMeasurement": {"Code": "IN"}, "Length": str(max_length), "Width": str(max_width), "Height": str(max_height)},
@@ -90,13 +101,13 @@ def get_ups_shipping_cost(origin_city, origin_postal, destination_city, destinat
             if shipment["Service"]["Code"] == "03":
                 cost = float(shipment["TotalCharges"]["MonetaryValue"])
                 total_qty = sum(items_to_ship.values())
-                return cost, cost / total_qty if total_qty > 0 else cost  # Return total and per-unit cost
+                return cost, cost / total_qty if total_qty > 0 else cost
         raise ValueError("UPS Ground not found")
     except Exception as e:
         print(f"UPS API error: {e}")
-        return 50.0 * sum(items_to_ship.values()), 50.0  # Fallback total and per-unit
+        return 50.0 * sum(items_to_ship.values()), 50.0
 
-def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, store_list, destination_city, destination_postal, item_weights, item_dimensions):
+def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, origin_countries, store_list, destination_city, destination_postal, item_weights, item_dimensions, destination_country):
     ordered_items = list(order_quantities.keys())
     
     for item in ordered_items:
@@ -110,14 +121,16 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
 
     access_token = get_ups_access_token()
     variable_shipping_costs = {}
-    store_shipping_totals = {}  # For breakdown
+    store_shipping_totals = {}
     for store in store_list:
         temp_items = {item: order_quantities[item] for item in ordered_items}
         total_cost, cost_per_unit = get_ups_shipping_cost(
             origin_city=origin_cities[store], 
             origin_postal=origin_postals[store],
+            origin_country=origin_countries[store],
             destination_city=destination_city, 
             destination_postal=destination_postal,
+            destination_country=destination_country,
             items_to_ship=temp_items, 
             weights=item_weights, 
             dimensions=item_dimensions, 
@@ -125,7 +138,7 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
         )
         for item in ordered_items:
             variable_shipping_costs[(store, item)] = cost_per_unit
-        store_shipping_totals[store] = total_cost  # Store total UPS cost for breakdown
+        store_shipping_totals[store] = total_cost
 
     shipping_problem += (
         pulp.lpSum([fixed_shipping_costs[store] * use_store[store] for store in store_list]) +
@@ -166,13 +179,14 @@ def calculate_optimal_shipping(order_quantities, store_inventories, fixed_shippi
             }
             if items:
                 shipping_plan[store] = items
-                # Calculate shipping cost for items actually shipped
                 shipped_items = {item: qty for item, qty in items.items()}
                 shipped_total_cost, _ = get_ups_shipping_cost(
                     origin_city=origin_cities[store], 
                     origin_postal=origin_postals[store],
+                    origin_country=origin_countries[store],
                     destination_city=destination_city, 
                     destination_postal=destination_postal,
+                    destination_country=destination_country,
                     items_to_ship=shipped_items, 
                     weights=item_weights, 
                     dimensions=item_dimensions, 
@@ -193,6 +207,7 @@ def index():
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
+        destination_country = request.form.get('destination_country', 'US')
         destination_city = request.form.get('destination_city', '')
         destination_postal = request.form.get('destination_postal', '')
 
@@ -223,6 +238,7 @@ def calculate():
         store_list = []
         origin_cities = {}
         origin_postals = {}
+        origin_countries = {}
         i = 0
         while True:
             name_key = f'store{i}_name'
@@ -233,6 +249,7 @@ def calculate():
                 store_list.append(store_name)
                 origin_cities[store_name] = request.form.get(f'origin_{store_name}', '')
                 origin_postals[store_name] = request.form.get(f'origin_postal_{store_name}', '')
+                origin_countries[store_name] = request.form.get(f'origin_country_{store_name}', 'US')
             i += 1
 
         store_inventories = {}
@@ -252,7 +269,7 @@ def calculate():
         fixed_shipping_costs = {store: float(request.form.get(f'fixed_{store}', 0)) for store in store_list}
 
         error_message, shipping_result = calculate_optimal_shipping(
-            order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, store_list, destination_city, destination_postal, item_weights, item_dimensions
+            order_quantities, store_inventories, fixed_shipping_costs, origin_cities, origin_postals, origin_countries, store_list, destination_city, destination_postal, item_weights, item_dimensions, destination_country
         )
         
         if error_message:
