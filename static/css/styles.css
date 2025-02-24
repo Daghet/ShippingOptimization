@@ -23,7 +23,7 @@ h1 {
   width: 100%;
 }
 .section-header {
-  background: #b35900;
+  background: #7b68ee; /* Changed from #6b48ff */
   color: white;
   padding: 12px;
   border-radius: 8px 8px 0 0;
@@ -64,7 +64,7 @@ td {
   border-bottom: 1px solid #4a525a;
 }
 th {
-  background: #b35900;
+  background: #7b68ee; /* Changed from #6b48ff */
   color: white;
   font-weight: 600;
 }
@@ -124,7 +124,7 @@ select {
 /* Button Styles */
 button {
   padding: 10px 20px;
-  background: #b35900;
+  background: #7b68ee; /* Changed from #6b48ff */
   color: white;
   border: none;
   border-radius: 5px;
@@ -133,7 +133,7 @@ button {
   transition: background 0.3s;
 }
 button:hover {
-  background: #8c4600;
+  background: #5f48b3; /* Changed from #5236cc */
 }
 
 /* Delete Button Styles */

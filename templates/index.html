@@ -10,25 +10,18 @@
         let itemCount = {{ sample_data.products| length }};
         let storeCount = 4;
 
-        /**
-         * Reindexes product input names to ensure sequential naming after DOM changes.
-         * Maintains consistency between frontend and backend form data.
-         */
         function reindexProducts() {
             const productRows = document.querySelectorAll('#sample-data-table tbody tr');
             productRows.forEach((row, i) => {
                 const inputs = row.querySelectorAll('input');
-                inputs[0].name = `product_name_${i}`;  // Name
-                inputs[1].name = `product_weight_${i}`; // Weight
-                inputs[2].name = `product_length_${i}`; // Length
-                inputs[3].name = `product_width_${i}`;  // Width
-                inputs[4].name = `product_height_${i}`; // Height
+                inputs[0].name = `product_name_${i}`;
+                inputs[1].name = `product_weight_${i}`;
+                inputs[2].name = `product_length_${i}`;
+                inputs[3].name = `product_width_${i}`;
+                inputs[4].name = `product_height_${i}`;
             });
         }
 
-        /**
-         * Reindexes order item inputs to maintain proper form submission order.
-         */
         function reindexOrderItems() {
             const orderItems = document.querySelectorAll('#order-items .order-entry');
             orderItems.forEach((item, i) => {
@@ -37,10 +30,6 @@
             });
         }
 
-        /**
-         * Retrieves all current product names from the Sample Products table.
-         * @returns {Array<string>} List of product names.
-         */
         function getAllProductNames() {
             const names = Array.from(document.querySelectorAll('#sample-data-table tbody tr'))
                 .map(row => row.cells[0].querySelector('input').value.trim());
@@ -48,31 +37,21 @@
             return names;
         }
 
-        /**
-         * Checks if a product name is unique, excluding the current input's original value.
-         * @param {string} name - The name to check.
-         * @param {string} oldName - The original name of the input being renamed.
-         * @returns {boolean} True if unique, false if duplicate exists.
-         */
-        function isProductNameUnique(name, oldName = null) {
-            const allNames = getAllProductNames();
+        function isProductNameUnique(name, oldName = null, currentInput) {
+            const allRows = document.querySelectorAll('#sample-data-table tbody tr');
             const trimmedName = name.trim().toLowerCase();
-            const isUnique = allNames.every(existingName => {
-                const isSameOldName = oldName && existingName.toLowerCase() === oldName.toLowerCase();
-                const isMatch = trimmedName === existingName.toLowerCase();
-                console.log(`Comparing '${trimmedName}' to '${existingName}': ${!isMatch || isSameOldName}`);
-                return !isMatch || isSameOldName;
+            const isUnique = Array.from(allRows).every(row => {
+                const input = row.cells[0].querySelector('input');
+                const existingName = input.value.trim().toLowerCase();
+                if (input === currentInput) return true;
+                const isMatch = trimmedName === existingName;
+                console.log(`Comparing '${trimmedName}' to '${input.value}': ${!isMatch}`);
+                return !isMatch;
             });
             console.log(`isProductNameUnique('${name}', oldName='${oldName}'): ${isUnique}`);
             return isUnique;
         }
 
-        /**
-         * Debounces a function to limit how often it runs.
-         * @param {Function} func - The function to debounce.
-         * @param {number} wait - Delay in milliseconds.
-         * @returns {Function} Debounced function.
-         */
         function debounce(func, wait) {
             let timeout;
             return function (...args) {
@@ -81,17 +60,12 @@
             };
         }
 
-        /**
-         * Adds a new product row with a unique name to the Sample Products table.
-         * Updates related UI sections dynamically.
-         */
         function addProduct() {
             const tableBody = document.querySelector('#sample-data-table tbody');
             let newItemName = `Item ${itemCount + 1}`;
             let suffix = 1;
             let finalName = newItemName;
 
-            // Ensure the initial name is unique
             while (!isProductNameUnique(finalName)) {
                 finalName = `${newItemName}-${suffix++}`;
             }
@@ -106,7 +80,6 @@
                 <td><span class="delete-btn" onclick="deleteProduct(this)">Delete</span></td>
             `;
 
-            // Set initial oldName
             const nameInput = newRow.cells[0].querySelector('input');
             nameInput.dataset.oldName = finalName;
 
@@ -117,10 +90,6 @@
             reindexProducts();
         }
 
-        /**
-         * Deletes a product row and updates related UI sections.
-         * @param {HTMLElement} button - The delete button clicked.
-         */
         function deleteProduct(button) {
             const row = button.closest('tr');
             const deletedItem = row.cells[0].querySelector('input').value;
@@ -131,10 +100,6 @@
             updateOrderItems();
         }
 
-        /**
-         * Renames a product, ensuring uniqueness with immediate feedback, and updates UI.
-         * @param {HTMLInputElement} input - The input element being edited.
-         */
         function renameProduct(input) {
             const oldName = input.dataset.oldName || '';
             const newName = input.value.trim();
@@ -148,7 +113,7 @@
                 return;
             }
 
-            if (!isProductNameUnique(newName, oldName)) {
+            if (!isProductNameUnique(newName, oldName, input)) {
                 alert(`Product name '${newName}' already exists. Names must be unique.`);
                 input.value = oldName;
                 console.log(`Duplicate detected, reverted to '${oldName}'`);
@@ -164,14 +129,8 @@
             reindexProducts();
         }
 
-        // Debounced version of renameProduct to avoid excessive calls
         const debouncedRenameProduct = debounce(renameProduct, 300);
 
-        /**
-         * Updates order item dropdowns when a product name changes.
-         * @param {string} oldName - The original product name.
-         * @param {string} newName - The new product name.
-         */
         function updateOrderItemName(oldName, newName) {
             const orderItems = document.querySelectorAll('#order-items .order-entry select');
             orderItems.forEach(select => {
@@ -184,10 +143,6 @@
             });
         }
 
-        /**
-         * Removes an order line if its product is deleted.
-         * @param {string} deletedItem - The name of the deleted product.
-         */
         function removeOrderLine(deletedItem) {
             const orderContainer = document.getElementById('order-items');
             const orderItems = orderContainer.querySelectorAll('.order-entry');
@@ -199,9 +154,6 @@
             updateOrderItems();
         }
 
-        /**
-         * Adds a new order item if there are available products.
-         */
         function addItem() {
             const orderContainer = document.getElementById('order-items');
             const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
@@ -227,10 +179,6 @@
             updateOrderItems();
         }
 
-        /**
-         * Deletes an order item and refreshes the UI.
-         * @param {HTMLElement} button - The delete button clicked.
-         */
         function deleteItem(button) {
             const entry = button.closest('.order-entry');
             entry.remove();
@@ -238,9 +186,6 @@
             updateOrderItems();
         }
 
-        /**
-         * Adds a new store row with default values and syncs inventory.
-         */
         function addStore() {
             const tableBody = document.getElementById('store-table-body');
             const allProducts = getAllProductNames();
@@ -273,19 +218,11 @@
             updateStoreReferences(newRow.cells[0].querySelector('input'));
         }
 
-        /**
-         * Deletes a store row and updates UI if needed.
-         * @param {HTMLElement} button - The delete button clicked.
-         */
         function deleteStore(button) {
             const row = button.closest('tr');
             row.remove();
         }
 
-        /**
-         * Updates store input names based on the store name input value.
-         * @param {HTMLInputElement} storeInput - The store name input field.
-         */
         function updateStoreReferences(storeInput) {
             const row = storeInput.closest('.store-row');
             const newStoreName = storeInput.value.trim() || `store${storeCount}`;
@@ -308,10 +245,6 @@
             });
         }
 
-        /**
-         * Toggles the visibility of a section.
-         * @param {string} sectionId - The ID of the section to toggle.
-         */
         function toggleSection(sectionId) {
             const section = document.getElementById(sectionId);
             section.classList.toggle('collapsed');
@@ -319,9 +252,6 @@
             arrow.textContent = section.classList.contains('collapsed') ? '▶' : '▼';
         }
 
-        /**
-         * Updates the Order Items section to reflect current products and selections.
-         */
         function updateOrderItems() {
             const orderContainer = document.getElementById('order-items');
             const orderedItems = Array.from(orderContainer.querySelectorAll('select')).map(select => select.value);
@@ -340,10 +270,6 @@
             });
         }
 
-        /**
-         * Updates the Store Details section to sync with the latest product list.
-         * Ensures renamed products reflect correctly by rebuilding from current DOM state.
-         */
         function updateStoreDetails() {
             const allProducts = getAllProductNames();
             const storeRows = document.querySelectorAll('.store-row');
@@ -355,19 +281,17 @@
                 const storeName = storeNameInput.value.trim() || `store${storeCount}`;
                 const stockCell = row.cells[4];
 
-                // Preserve quantities based on current DOM state
                 const existingQuantities = {};
                 const currentStockInputs = stockCell.querySelectorAll('.item-pair input[type="number"]');
                 const currentStockNames = stockCell.querySelectorAll('.item-pair input[type="text"]');
                 currentStockNames.forEach((nameInput, i) => {
-                    if (currentStockInputs[i]) {
+                    if (currentStockInputs[i] && allProducts.includes(nameInput.value)) {
                         existingQuantities[nameInput.value] = currentStockInputs[i].value;
                     }
                 });
 
                 console.log(`Store '${storeName}' existing quantities:`, existingQuantities);
 
-                // Rebuild stock inputs with latest product names
                 stockCell.innerHTML = allProducts.map((item, i) => `
                     <div class="item-pair">
                         <input type="text" name="stock_${storeName}_item${i}_name" value="${item}" readonly>
@@ -377,15 +301,27 @@
             });
         }
 
-        /**
-         * Submits the form data to calculate shipping costs and displays results.
-         */
         function calculateShipping() {
             console.log("Calculate button clicked");
             const form = document.querySelector('form');
             const formData = new FormData(form);
 
-            // Ensure all product data is up-to-date in formData
+            // Collapse all sections immediately
+            ['order-details', 'store-details', 'sample-data'].forEach(id => {
+                const section = document.getElementById(id);
+                section.classList.add('collapsed');
+                section.querySelector('.section-header span').textContent = '▶';
+            });
+
+            // Show calculating GIF
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div class="calculating">
+                    <img src="{{ url_for('static', filename='images/GearSpinner200px-200px.gif') }}" alt="Calculating..." style="display: block; margin: 0 auto;">
+                    <p style="text-align: center; margin-top: 10px;">Calculating...</p>
+                </div>
+            `;
+
             const productRows = document.querySelectorAll('#sample-data-table tbody tr');
             productRows.forEach((row, i) => {
                 const inputs = row.querySelectorAll('input');
@@ -408,7 +344,6 @@
                     const clientTotalTime = (endTime - startTime).toFixed(2);
                     console.log("Response Data:", data);
 
-                    const resultDiv = document.getElementById('result');
                     if (data.error) {
                         resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
                         return;
@@ -448,20 +383,13 @@
                         </div>
                     `;
                     resultDiv.innerHTML = html;
-
-                    ['order-details', 'store-details', 'sample-data'].forEach(id => {
-                        const section = document.getElementById(id);
-                        section.classList.add('collapsed');
-                        section.querySelector('.section-header span').textContent = '▶';
-                    });
                 })
                 .catch(error => {
                     console.error("Fetch error:", error);
-                    document.getElementById('result').innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                    resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
                 });
         }
 
-        // Initialize UI on page load
         window.onload = () => {
             updateOrderItems();
             updateStoreDetails();
@@ -472,7 +400,6 @@
 <body>
     <h1>Shipping Optimization with UPS</h1>
     <form>
-        <!-- Sample Product Data Section -->
         <div class="section" id="sample-data">
             <div class="section-header" onclick="toggleSection('sample-data')">
                 <h2>Sample Product Data</h2>
@@ -512,7 +439,6 @@
             </div>
         </div>
 
-        <!-- Order Details Section -->
         <div class="section" id="order-details">
             <div class="section-header" onclick="toggleSection('order-details')">
                 <h2>Order Details</h2>
@@ -555,7 +481,6 @@
             </div>
         </div>
 
-        <!-- Store Details Section -->
         <div class="section" id="store-details">
             <div class="section-header" onclick="toggleSection('store-details')">
                 <h2>Store Details</h2>
